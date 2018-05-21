@@ -1,7 +1,3 @@
-# setwd("~/Documents/Projects/Statcast linear weights")
-setwd("~/Dropbox/masters thesis/Statcast linear weights")
-
-
 # functions ---------------------------------------------------------------
 
 source("./define_functions.R")
