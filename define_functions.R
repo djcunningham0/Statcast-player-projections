@@ -1,36 +1,8 @@
-# I don't think this one is actually used...
-daily_batter_bref_with_id <- function(t1, t2) {
-  require(dplyr)
-  require(rvest)
-  require(xml2)
-  
-  df <- read_html(paste0("http://www.baseball-reference.com/leagues/daily.cgi?user_team=&bust_cache=&type=b&lastndays=7&dates=fromandto&fromandto=", 
-                         t1, ".", t2, "&level=mlb&franch=&stat=&stat_value=0"))
-  mlb_ids <- html_attr(html_nodes(df,"a"),"href")
-  mlb_ids <- mlb_ids[grepl("redirect.fcgi",mlb_ids)]
-  mlb_ids <- as.numeric(sapply(strsplit(mlb_ids,"mlb_ID="),`[`,2))
-  df <- df %>% html_nodes(xpath = "//*[@id=\"daily\"]") %>% 
-    html_table(fill = TRUE)
-  df <- as.data.frame(df)[-c(1, 3, 5)]
-  names(df)[1:4] <- c("Name", "Age", "Level", "Team")
-  df[, c(2, 5:26)] <- lapply(df[, c(2, 5:26)], as.numeric)
-  df$X1B <- with(df, H - (X2B + X3B + HR))
-  season <- substr(t1, 1, 4)
-  df$season <- season
-  df$uBB <- with(df, BB - IBB)
-  df <- df[, c(28, 1:9, 27, 10:15, 29, 16:26)]
-  df$Team <- gsub(" $", "", df$Team, perl = T)
-  df <- filter_(df, ~Name != "Name")
-  df$mlb_id <- mlb_ids
-  df <- arrange_(df, ~desc(PA), ~desc(OPS))
-  df
-}
-
 #'
 #' @param df data frame (should be created from CSV file)
 #' @param lw vector of linear weights
 #' 
-#' @return a data frame with all of the necessary columns
+#' @return a data frame with all of the necessary columns (plus some extras)
 #' 
 format_data_frame <- function(df,lw) {
   # create new data frame with possibly relevant columns
@@ -43,15 +15,15 @@ format_data_frame <- function(df,lw) {
             "lahman_id",
             "pitcher",
             "events",
-            "description",
-            "zone",
+            # "description",
+            # "zone",
             "des",
             "game_type",
             "stand",
             "p_throws",
             "home_team",
             "away_team",
-            "type",
+            # "type",
             "hit_location",
             "bb_type",
             "on_1b",
@@ -62,13 +34,13 @@ format_data_frame <- function(df,lw) {
             "inning_topbot",
             "hc_x",
             "hc_y",
-            "sv_id",
-            "hit_distance_sc",
+            # "sv_id",
+            # "hit_distance_sc",
             "launch_speed",
             "launch_angle",
-            "effective_speed",
-            "game_pk",
-            "launch_speed_angle",
+            # "effective_speed",
+            # "game_pk",
+            # "launch_speed_angle",
             "babip_value",  # use babip_value and iso_value to classify out, single, double, etc.
             "iso_value")
   batted <- df[keep]
@@ -87,6 +59,9 @@ format_data_frame <- function(df,lw) {
   
   # remove any rows with NA values in key columns
   batted <- subset(batted,!is.na(launch_speed) & !is.na(launch_angle) & !is.na(spray_angle))
+  
+  # add speed scores pulled from FanGraphs
+  batted <- add_speed_scores(batted)
   
   batted$babip_iso <- as.factor(with(batted,paste0(babip_value,"_",iso_value)))
   
@@ -114,7 +89,9 @@ format_data_frame <- function(df,lw) {
   return(batted)
 }
 
+#' 
 #' @return linear weight values and the multiplier to convert to OBP scale
+#' 
 set_linear_weights <- function() {
   # add linear weight values
   # linear weights reference: https://www.fangraphs.com/library/principles/linear-weights/
@@ -130,9 +107,31 @@ set_linear_weights <- function() {
 #' 
 #' @param probs an array of probabilities for out, single, double, etc.
 #' @param lw vector of linear weights
+#' 
+#' @return vector of predicted linear weights
+#' 
 predict_lw_from_probs <- function(probs, lw) {
   classes <- c("out","single","double","triple","home_run")
   return(probs[,classes] %*% lw[classes])
+}
+
+#' 
+#' @param prefix the prefix for the column names (e.g., multinom, rf, knn, etc.)
+#' @param df data frame of batted balls to add prediction columns to
+#' @param probs predicted probabilities of each class (single, double, etc.)
+#' 
+#' @return df with columns for predicted linear weight and probability of each hit type
+#' 
+add_preds_from_probs <- function(prefix, df, probs, lw) {
+  # predict linear weights and add to df
+  df[,paste0(prefix,"_linear_weight")] <- predict_lw_from_probs(probs, lw)
+  
+  # add probs for 1B, 2B, 3B, HR
+  for (class in c("single","double","triple","home_run")) {
+    df[,paste0(prefix,"_",class)] <- probs[,class]
+  }
+  
+  return(df)
 }
 
 #' 
@@ -143,10 +142,10 @@ predict_lw_from_probs <- function(probs, lw) {
 #' 
 #' @return a kNN regression model
 #' 
-fit_knn_regression_model <- function(df, k, trainSize, seed=1) {
+fit_knn_regression_model <- function(df, k, trainSize, seed=NULL) {
   require(caret)
   
-  set.seed(seed)
+  if (!is.null(seed)) { set.seed(seed) }
   n <- dim(df)[1]
   which.train <- sample(1:n,floor(n*trainSize))
   training <- df[which.train,]
@@ -160,48 +159,72 @@ fit_knn_regression_model <- function(df, k, trainSize, seed=1) {
 }
 
 #' 
+#' @param df data frame
+#' @param k value of k to use
+#' @param trainSize proportion of data to use for training the model
+#' @param seed seed to set
+#' 
+#' @return a kNN classification model
+#' 
+fit_knn_classification_model <- function(df, k, trainSize, seed=NULL) {
+  require(caret)
+  
+  if (!is.null(seed)) { set.seed(seed) }
+  n <- dim(df)[1]
+  which.train <- sample(1:n,floor(n*trainSize))
+  training <- df[which.train,]
+  
+  fitCtrl <- trainControl(method = "none")
+  knnmod <- train(class ~ ., data=training[c("class","launch_speed","launch_angle","spray_angle")],
+                  method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
+                  preProcess=c("scale","center"))
+  
+  return(knnmod)
+}
+
+#' 
 #' @param df data frame (batted)
-#' @param lwCols vector of column names with linear weight predictions
+#' @param lwCols vector of prefixes for models with linear weight predictions
+#' @param fullCols vector of prefixes for models with full predictions
+#' @param by_month set to TRUE to group data by year and month
 #' 
 #' @return a data table grouped by player and year with linear weights and predicted linear weights
 #' 
-group_weights_by_year <- function(df, lwCols) {
+group_weights_by_year <- function(df, lwCols, fullCols, by_month=FALSE) {
   require(data.table)
-  weights.dt <- data.table(df[c("lahman_id","batter","game_year","linear_weight",lwCols)])
-  colnames(weights.dt)[colnames(weights.dt)=="batter"] <- "mlb_id"
+  cols <- c()
+  for (pre in lwCols) {
+    cols <- c(cols, paste0(pre,"_linear_weight"))
+    if (pre %in% fullCols) {
+      cols <- c(cols, paste0(pre,"_",c("single","double","triple","home_run")))
+    }
+  }
   
-  # .SD is a subset with all columns except the grouping columns
-  weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year)]
+  if (by_month==TRUE) {
+    weights.dt <- data.table(df[c("lahman_id","batter","game_year","game_month","linear_weight",cols)])
+    colnames(weights.dt)[colnames(weights.dt)=="batter"] <- "mlb_id"
+    # .SD is a subset with all columns except the grouping columns
+    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year,game_month)]
+  }
+  else {
+    weights.dt <- data.table(df[c("lahman_id","batter","game_year","linear_weight",cols)])
+    colnames(weights.dt)[colnames(weights.dt)=="batter"] <- "mlb_id"
+    # .SD is a subset with all columns except the grouping columns
+    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year)]
+  }
   
   return(weights.dt)
 }
 
-#' 
-#' @param df data frame (batted)
-#' @param lwCols vector of column names with linear weight predictions
-#' 
-#' @return a data table grouped by player, year, and month with linear weights and predicted linear weights
-#' 
-group_weights_by_year_month <- function(df, lwCols) {
-  require(data.table)
-  weights_by_month.dt <- data.table(df[c("lahman_id","batter","game_year",
-                                         "game_month","linear_weight",lwCols)])
-  colnames(weights_by_month.dt)[colnames(weights_by_month.dt)=="batter"] <- "mlb_id"
-  
-  # .SD is a subset with all columns except the grouping columns
-  weights_by_month.dt <- weights_by_month.dt[,lapply(.SD,sum),
-                                             by=list(lahman_id,mlb_id,game_year,game_month)]
-  
-  return(weights_by_month.dt)
-}
 
 #' 
 #' @param weights.dt data.table of weights from group_weights_by_year
-#' @param lwCols vector of column names with linear weight predictions
+#' @param lwCols vector of prefixes for models with linear weight predictions
+#' @param fullCols vector of prefixes for models with full predictions
 #' 
 #' @return a data table grouped by player and year with predicted linear weights and wOBA
 #' 
-add_wOBA_preds_to_yearly_data <- function(weights.dt, lwCols) {
+add_preds_to_yearly_data <- function(weights.dt, lwCols, fullCols) {
   require(Lahman)
   
   minYear <- min(weights.dt$game_year)
@@ -211,7 +234,7 @@ add_wOBA_preds_to_yearly_data <- function(weights.dt, lwCols) {
   batting.dt <- data.table(Batting)
   batting.dt <- subset(batting.dt,yearID %in% minYear:maxYear)
   
-  if (maxYear==2017 & max(batting.dt$yearID)!=2017){
+  if (maxYear>=2017 & max(batting.dt$yearID)<=2017){
     load("./lahman.batting.2017.RData")
     batting.dt <- rbind(batting.dt,lahman.batting.2017)
   }
@@ -229,7 +252,7 @@ add_wOBA_preds_to_yearly_data <- function(weights.dt, lwCols) {
   lw <- tmp$lw
   lw_multiplier <- tmp$multiplier
   
-  # calculate true wOBA
+  # calculate true wOBA from Lahman
   batting.dt$wOBA <- with(batting.dt, (lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
                                                           lw["single"]*X1B + lw["double"]*X2B + 
                                                           lw["triple"]*X3B + lw["home_run"]*HR) / 
@@ -243,24 +266,18 @@ add_wOBA_preds_to_yearly_data <- function(weights.dt, lwCols) {
   batting.dt <- merge(batting.dt,weights.dt,by=c("playerID","yearID"),all=TRUE)
   
   # add predicted wOBA values from models
-  wOBA.cols <- gsub("linear_weight","wOBA",lwCols)
-  for (i in 1:length(lwCols)) {
-    batting.dt[[wOBA.cols[i]]] <- with(batting.dt, (lw_multiplier*(batting.dt[[lwCols[i]]] + 
-                                                                   lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / 
-                                                    (AB + BB - IBB + SF + HBP)))
+  # use true values for AB, BB, etc.
+  for (pre in lwCols) {
+    batting.dt[[paste0(pre,"_wOBA")]] <- with(batting.dt, (lw_multiplier*(batting.dt[[paste0(pre,"_linear_weight")]] + 
+                                                                          lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / 
+                                                           (AB + BB - IBB + SF + HBP)))
   }
-  # batting.dt$lm_wOBA <- with(batting.dt,
-  #                            lw_multiplier*(lm_linear_weight + lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / (AB + BB - IBB + SF + HBP))
-  # batting.dt$rf_wOBA_1 <- with(batting.dt,
-  #                              lw_multiplier*(rf_linear_weight + lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / (AB + BB - IBB + SF + HBP))
-  # batting.dt$rf_wOBA_2 <- with(batting.dt,
-  #                              lw_multiplier*(rf_linear_weight_2 + lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / (AB + BB - IBB + SF + HBP))
   
   return(batting.dt)
 }
 
 #' 
-#' @param batting.dt data table from add_wOBA_preds_to_yearly_data
+#' @param batting.dt data table from add_preds_to_yearly_data
 #' 
 #' @return lagged data table with year and previous year values in each row
 #' 
@@ -275,10 +292,21 @@ lag_yearly_data <- function(batting.dt) {
   return(batting_lagged)
 }
 
-
+#' 
+#' @param data data frame with data to plot
+#' @param x.col name of column in data to use for x axis
+#' @param y.col name of column in data to use for y axis
+#' @param xlab x-axis label (default: x.col)
+#' @param ylab y-axis label (default: y.col)
+#' @param plotTitle title for plot (default: ylab vs. xlab)
+#' @param includeCorrelation if TRUE, show correlation of x,y on second line of title
+#' @param include_y_equal_x if TRUE, show y=x line
+#' 
+#' @return a ggplot object
+#' 
 basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE) {
+                              includeCorrelation=TRUE,include_y_equal_x=TRUE) {
   require(ggplot2)
   
   x <- unname(unlist(data[,x.col,with=FALSE]))
@@ -290,16 +318,36 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
            + labs(x=xlab,y=ylab,title=plotTitle)
   )
   
+  if (include_y_equal_x == TRUE) {
+    p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
+  }
+  
   return(p)
 }
 
+#' 
+#' @param data data frame with data to plot
+#' @param x.col name of column in data to use for x axis
+#' @param y.col name of column in data to use for y axis
+#' @param color.col name of column in data to use for point color
+#' @param xlab x-axis label (default: x.col)
+#' @param ylab y-axis label (default: y.col)
+#' @param plotTitle title for plot (default: ylab vs. xlab)
+#' @param includeCorrelation if TRUE, show correlation of x,y on second line of title
+#' @param include_y_equal_x if TRUE, show y=x line
+#' @param colorBarTitle title for color bar
+#' 
+#' @return a ggplot object
+#' 
 color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE,colorBarTitle=color.col) {
+                              includeCorrelation=TRUE,include_y_equal_x=TRUE,
+                              colorBarTitle=color.col) {
   require(ggplot2)
   
   if (is.null(color.col)) {
-    return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation))
+    # if no color, call basic_scatterplot instead
+    return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation,include_y_equal_x))
   }
   else{
     x <- unname(unlist(data[,x.col,with=FALSE]))
@@ -314,11 +362,53 @@ color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.
                                    guide=guide_colorbar(title=colorBarTitle))
     )
     
+    if (include_y_equal_x == TRUE) {
+      p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
+    }
+    
     return(p)
   }
 }
   
+#' any columns containing "_home_run" have full predictions for that model
+#' 
+#' @param col_names the column names of the batted balls data frame containing model predictions
+#' 
+get_full_prediction_prefixes <- function(col_names) {
+  indices <- grep("_home_run", col_names)
+  full <- col_names[indices]
+  prefix <- sapply(strsplit(full,"_"),'[',1)
+  return(prefix)
+}
+
+#' any columns containing "_linear_weight" have linear weight predictions for that model
+#' 
+#' @param col_names the column names of the batted balls data frame containing model predictions
+#' 
+get_lw_prediction_prefixes <- function(col_names) {
+  indices <- grep("_linear_weight", col_names)
+  full <- col_names[indices]
+  prefix <- sapply(strsplit(full,"_"),'[',1)
+  return(prefix)
+}
+
+#' speed scores available from FanGraphs:
+#' https://www.fangraphs.com/library/offense/spd/ 
+#' 
+#' @param batted data frame of batted balls
+add_speed_scores <- function(batted) {
+  require(data.table)
+  speed_scores <- read.csv("./speed scores.csv")
+  speed_scores <- data.table(speed_scores)
   
+  # group by MLB ID and year in case there are multiple entries for a player per year (not sure if this happens)
+  # (should really do a weighted average of the player's two scores, but this is good enough)
+  speed_scores <- speed_scores[,list(Spd=mean(Spd)),by=list(mlb_id,year)]
+  
+  batted <- merge(batted, speed_scores, by.x=c("batter","game_year"), by.y=c("mlb_id","year"),
+                  all.x=TRUE)
+  return(batted)
+}
   
   
   

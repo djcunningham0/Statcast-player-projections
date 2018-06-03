@@ -1,5 +1,3 @@
-setwd("~/Dropbox/masters thesis/Statcast linear weights/")
-
 library(baseballr)
 
 startYear <- 2015
@@ -53,7 +51,7 @@ library(Lahman)
 data("Batting")
 
 # check if 2017 is in the Lahman R package yet
-if (endYear==2017 & max(Batting$yearID)!=2017) {
+if (endYear>=2017 & max(Batting$yearID)<=2017) {
   load("./lahman.master.2017.RData")
   df <- lahman.master.2017
 } else {
@@ -68,10 +66,10 @@ batted <- unique(batted)
 
 
 # write data
-print("Writing all pitches file.")
-write.csv(alldata,"./all_pitches_by_batter_2015-2017.csv")
-print("Writing batted balls file.")
-write.csv(batted,"./batted_balls_2015-2017.csv")
+print("Writing all pitches file...")
+write.csv(alldata,paste0("./all_pitches_by_batter_",startYear,"-",endYear,".csv"))
+print("Writing batted balls file...")
+write.csv(batted,paste0("./batted_balls_",startYear,"-",endYear,".csv"))
 
 
 

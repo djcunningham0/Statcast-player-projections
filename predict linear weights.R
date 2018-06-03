@@ -30,19 +30,19 @@ batted$lm_linear_weight <- predict(lmod,newdata=batted)
 library(nnet)
 mod.multinom <- multinom(class ~ launch_speed + launch_angle + spray_angle, data=batted)
 probs <- predict(mod.multinom,newdata=batted,type="prob")
-batted$multinom_linear_weight <- predict_lw_from_probs(probs,lw)
+batted <- add_preds_from_probs("multinom", batted, probs, lw)
 
-mod.multinom.stand <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
-probs.stand <- predict(mod.multinom.stand,newdata=batted,type="prob")
-batted$multinom_linear_weight_2 <- predict_lw_from_probs(probs.stand,lw)
-
-mod.multinom.home <- multinom(class ~ launch_speed + launch_angle + spray_angle + home_team, data=batted)
-probs.home <- predict(mod.multinom.home,newdata=batted,type="prob")
-batted$multinom_linear_weight_3 <- predict_lw_from_probs(probs.home,lw)
-
-mod.multinom.both <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand + home_team, data=batted)
-probs.both <- predict(mod.multinom.both,newdata=batted,type="prob")
-batted$multinom_linear_weight_4 <- predict_lw_from_probs(probs.both,lw)
+# mod.multinom.stand <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
+# probs.stand <- predict(mod.multinom.stand,newdata=batted,type="prob")
+# batted$multinom_linear_weight_2 <- predict_lw_from_probs(probs.stand,lw)
+# 
+# mod.multinom.home <- multinom(class ~ launch_speed + launch_angle + spray_angle + home_team, data=batted)
+# probs.home <- predict(mod.multinom.home,newdata=batted,type="prob")
+# batted$multinom_linear_weight_3 <- predict_lw_from_probs(probs.home,lw)
+# 
+# mod.multinom.both <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand + home_team, data=batted)
+# probs.both <- predict(mod.multinom.both,newdata=batted,type="prob")
+# batted$multinom_linear_weight_4 <- predict_lw_from_probs(probs.both,lw)
 
 
 
@@ -51,7 +51,7 @@ batted$multinom_linear_weight_4 <- predict_lw_from_probs(probs.both,lw)
 library(MASS)
 mod.lda <- lda(class ~ launch_speed + launch_angle + spray_angle, data=batted)
 probs.lda <- predict(mod.lda,newdata=batted)$posterior
-batted$lda_linear_weight <- predict_lw_from_probs(probs.lda,lw)
+batted <- add_preds_from_probs("lda", batted, probs.lda, lw)
 
 
 # fit random forest models ------------------------------------------------
@@ -60,35 +60,34 @@ batted$lda_linear_weight <- predict_lw_from_probs(probs.lda,lw)
 library(randomForest)
 load("./rf_models_032518.RData")
 
-set.seed(1)
-print(1)
-rf <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle, data=batted)
-print("done")
-set.seed(1)
-print(2)
-rf.stand <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
-print("done")
-set.seed(1)
-print(3)
-rf.home <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + home_team, data=batted)
-print("done")
-set.seed(1)
-print(4)
-rf.both <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + stand + home_team, data=batted)
-print(done)
+# set.seed(1)
+# print(1)
+# rf <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle, data=batted)
+# print("done")
+# set.seed(1)
+# print(2)
+# rf.stand <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
+# print("done")
+# set.seed(1)
+# print(3)
+# rf.home <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + home_team, data=batted)
+# print("done")
+# set.seed(1)
+# print(4)
+# rf.both <- randomForest(linear_weight ~ launch_speed + launch_angle + spray_angle + stand + home_team, data=batted)
+# print(done)
 # rf2017.class <- randomForest(class ~ launch_speed + launch_angle + spray_angle, data=batted2017)
 # rf2017.class.stand <- randomForest(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted2017)
 # rf2017.class.home <- randomForest(class ~ launch_speed + launch_angle + spray_angle + home_team, data=batted2017)
 
-# predict linear weight from regression model
-batted$rf_linear_weight <- round(predict(rf2017,newdata=batted),6)
-
-# predict most probable result from classification model
-batted$rf_class <- predict(rf2017.class,newdata=batted)
-
 # predict linear weight from classification model by taking dot prodict with linear weights vector
 probs.rf <- predict(rf2017.class,newdata=batted,type="prob")
-batted$rf_linear_weight_2 <- predict_lw_from_probs(probs.rf,lw)
+batted <- add_preds_from_probs("rf", batted, probs.rf, lw)
+
+# predict linear weight from regression model
+batted$rf2_linear_weight <- predict(rf2017,newdata=batted)
+
+
 
 
 # fit kNN model -----------------------------------------------------------
@@ -100,8 +99,13 @@ library(caret)
 
 # currently fitting model on half the data
 # could fit on all data, but would need to re-tune k and it won't make much difference
-knnmod <- fit_knn_regression_model(batted, k=50, trainSize=0.5, seed=1)
-batted$knn_linear_weight <- predict(knnmod, newdata=batted)
+knnmod.class <- fit_knn_classification_model(batted, k=50, trainSize=0.5, seed=1)
+probs.knn <- predict(knnmod.class,newdata=batted,type="prob")
+probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
+batted <- add_preds_from_probs("knn", batted, probs.knn, lw)
+
+# knnmod.reg <- fit_knn_regression_model(batted, k=50, trainSize=0.5, seed=1)
+# batted$knn2_linear_weight <- predict(knnmod, newdata=batted)
 
 # fit other models --------------------------------------------------------
 
@@ -113,23 +117,24 @@ batted$knn_linear_weight <- predict(knnmod, newdata=batted)
 # - XGBoost (boosted trees. use method="xgbTree" or "xgbLinear")
 # - somehow account for the fact that the RF model underestimates wOBA for faster players
 # - add age into the model, or adjust for future year's prediction
+# - mixed effect vesion of multinomial model
+# 
+# add speed scores to all models
 
 # group linear weights by player ------------------------------------------
 
 # lw_cols stores names of columns in 'batted' with linear weight predictions
-lw.cols <- c("lm_linear_weight","multinom_linear_weight","rf_linear_weight","rf_linear_weight_2",
-             "knn_linear_weight","lda_linear_weight","multinom_linear_weight_2","multinom_linear_weight_3",
-             "multinom_linear_weight_4")
-lw.cols <- "rf_linear_weight"
+lw.prefixes <- get_lw_prediction_prefixes(colnames(batted))
+full.prefixes <- get_full_prediction_prefixes(colnames(batted))
 
 library(data.table)
-weights.dt <- group_weights_by_year(batted, lw.cols)
-weights_by_month.dt <- group_weights_by_year_month(batted, lw.cols)
+weights.dt <- group_weights_by_year(batted, lw.prefixes, full.prefixes)
+weights_by_month.dt <- group_weights_by_year(batted, lw.prefixes, full.prefixes, by_month=TRUE)
 
 
 # add wOBA to Lahman database ---------------------------------------------
 
-batting.dt <- add_wOBA_preds_to_yearly_data(weights.dt, lw.cols)
+batting.dt <- add_preds_to_yearly_data(weights.dt, lw.prefixes, full.prefixes)
 # need to do the same for monthly data if I'm going to do month-to-month correlations
 
 batting_lagged <- lag_yearly_data(batting.dt)
@@ -151,13 +156,9 @@ print(p.lm)
 # first few plots are just a gut check
 # (make sure the models are correlated with wOBA)
 p1 <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="rf_wOBA",y.col="wOBA",
-                        xlab="random forest wOBA prediction (1)",plotTitle="wOBA vs. RF prediction (method 1)")
+                        xlab="random forest wOBA prediction",plotTitle="wOBA vs. RF prediction")
 print(p1)
 # ggplotly(p1)
-
-p2 <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="rf_wOBA_2",y.col="wOBA",
-                        xlab="random forest wOBA prediction (2)",plotTitle="wOBA vs. RF prediction (method 2)")
-print(p2)
 
 p3 <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="knn_wOBA",y.col="wOBA",
                         xlab="kNN wOBA prediction",plotTitle="wOBA vs. kNN prediction")
@@ -165,16 +166,7 @@ print(p3)
 
 p <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA",y.col="wOBA")
 print(p)
-ggplotly(p)
-
-p <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_2",y.col="wOBA")
-print(p)
-
-p <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_3",y.col="wOBA")
-print(p)
-
-p <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_4",y.col="wOBA")
-print(p)
+# ggplotly(p)
 
 p <- basic_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="lda_wOBA",y.col="wOBA")
 print(p)
@@ -194,9 +186,6 @@ p <- color_scatterplot(data=df,x.col="x",y.col="y",color.col="color",xlab="rf_wO
                        colorBarTitle="SBperAB",plotTitle="wOBA vs. rf_wOBA")
 print(p)
 
-p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="rf_wOBA_2",y.col="wOBA",color.col="SBperAB")
-print(p)
-
 p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="knn_wOBA",y.col="wOBA",color.col="SBperAB")
 print(p)
 
@@ -204,15 +193,6 @@ p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="lm_wOBA",y.c
 print(p)
 
 p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA",y.col="wOBA",color.col="SBperAB")
-print(p)
-
-p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_2",y.col="wOBA",color.col="SBperAB")
-print(p)
-
-p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_3",y.col="wOBA",color.col="SBperAB")
-print(p)
-
-p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="multinom_wOBA_4",y.col="wOBA",color.col="SBperAB")
 print(p)
 
 p <- color_scatterplot(data=subset(batting.dt,AB>=AB_cutoff),x.col="lda_wOBA",y.col="wOBA",color.col="SBperAB")
@@ -229,24 +209,21 @@ print(p)
 p <- basic_scatterplot(data=plot_subset,x.col="rf_wOBA.prev",y.col="wOBA")
 print(p)
 
-p <- basic_scatterplot(data=plot_subset,x.col="rf_wOBA_2.prev",y.col="wOBA")
-print(p)
-
 p <- basic_scatterplot(data=plot_subset,x.col="knn_wOBA.prev",y.col="wOBA")
 print(p)
 
 p <- basic_scatterplot(data=plot_subset,x.col="multinom_wOBA.prev",y.col="wOBA")
 print(p)
 
-p <- basic_scatterplot(data=plot_subset,x.col="multinom_wOBA_2.prev",y.col="wOBA")
+# home runs
+p <- basic_scatterplot(data=plot_subset,x.col="HR.prev",y.col="HR")
 print(p)
 
-p <- basic_scatterplot(data=plot_subset,x.col="multinom_wOBA_3.prev",y.col="wOBA")
+p <- basic_scatterplot(data=plot_subset,x.col="rf_home_run.prev",y.col="HR")
 print(p)
 
-p <- basic_scatterplot(data=plot_subset,x.col="multinom_wOBA_4.prev",y.col="wOBA")
+p <- basic_scatterplot(data=plot_subset,x.col="knn_home_run.prev",y.col="HR")
 print(p)
-
 
 
 # for Saberseminar abstract submission ------------------------------------
@@ -298,7 +275,6 @@ grid.arrange(p1,p2,ncol=2)
 
 
 # to do -------------------------------------------------------------------
-# - make an outline of the paper
 # - create function that adds class probabilities to batted data frame
 # - calculate or download Marcel projections
 # - download speed scores and incorporate into models
