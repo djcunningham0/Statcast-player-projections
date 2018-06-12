@@ -146,19 +146,24 @@ batting_lagged <- lag_yearly_data(batting.dt)
 sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
 
 
+# get Marcel projections --------------------------------------------------
+
+marcel.2017 <- marcel_projections(2017, lw_years=2015:2017)
+marcel.2017.rf <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf", lw_years=2015:2017)
+marcel.2017.rf.speed <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf.speed", lw_years=2015:2017)
+marcel.2017.knn <- marcel_projections(2017, pred_df=batting.dt, model_prefix="knn", lw_years=2015:2017)
+marcel.2017.multinom <- marcel_projections(2017, pred_df=batting.dt, model_prefix="multinom", lw_years=2015:2017)
+marcel.2017.lda <- marcel_projections(2017, pred_df=batting.dt, model_prefix="lda", lw_years=2015:2017)
+
+
+
 
 # future ideas ------------------------------------------------------------
 # - more models
 # - add wind speed and direction from retrosheet data (it's in event files, maybe in game files)
 # - player age/experience
-# - use different measures of player value
-#   - SLG% would be doable for each batted ball (predict total bases from exit velo, etc.)
 # - compare to Marcel projection system
 #   - this page describes the methodology: https://www.beyondtheboxscore.com/2016/2/22/11079186/projections-marcel-pecota-zips-steamer-explained-guide-math-is-fun 
-# - predict more than wOBA
-#   - with class probabilities, can predict number of 1Bs, 2Bs, 3Bs, and HRs
-# - use speed score instead of SB/AB
-#   - available on FanGraphs: https://www.fangraphs.com/library/offense/spd/ 
 # - how to account for the fact that HRs seem more likely to happen in 2017?
 # - neural network
 #   - exit velocity, launch angle, spray angle
@@ -171,15 +176,18 @@ sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
 #   - good example of a baseball article using mixed effect models:
 #     https://www.baseballprospectus.com/news/article/25514/moving-beyond-wowy-a-mixed-approach-to-measuring-catcher-framing/
 # - any way to get confidence intervals for correlation coefficients?
+# - how to evaluate full projections?
+#   - maybe some ideas from here:
+#     https://www.beyondtheboxscore.com/2017/1/8/14189138/pecota-zips-steamer-marcel-projection-systems-graded
+#   - or here:
+#     https://web.archive.org/web/20080111231423/http://www.baseballprospectus.com/unfiltered/?p=564
   
 
 
 
 
 # to do -------------------------------------------------------------------
-# - create function that adds class probabilities to batted data frame
 # - calculate or download Marcel projections
-# - download speed scores and incorporate into models
 # - look up Bill James aging curve
 
 

@@ -255,10 +255,10 @@ add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes
   
   # sum the relevant statistics for computing wOBA
   # group by playerID and yearID to account for players who changed teams
-  batting.dt <- batting.dt[,list(AB=sum(AB),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),
-                                 HR=sum(HR),BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SB=sum(SB)),
+  batting.dt <- batting.dt[,list(AB=sum(AB),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
+                                 BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
+                                 SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP)),
                            by=list(playerID,yearID)]
-  batting.dt$SBperAB <- batting.dt$SB / batting.dt$AB
   
   # description of wOBA: https://www.fangraphs.com/library/offense/woba/
   # weights by year: https://www.fangraphs.com/guts.aspx?type=cn
@@ -269,8 +269,7 @@ add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes
   # calculate true wOBA from Lahman
   batting.dt$wOBA <- with(batting.dt, (lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
                                                           lw["single"]*X1B + lw["double"]*X2B + 
-                                                          lw["triple"]*X3B + lw["home_run"]*HR) / 
-                                         (AB + BB - IBB + SF + HBP)))
+                                                          lw["triple"]*X3B + lw["home_run"]*HR) / PA))
   
   # merge batting.dt and weights.dt
   colnames(weights.dt)[colnames(weights.dt)=="lahman_id"] <- "playerID"
@@ -283,8 +282,7 @@ add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes
   # use true values for AB, BB, etc.
   for (pre in lw.prefixes) {
     batting.dt[[paste0(pre,"_wOBA")]] <- with(batting.dt, (lw_multiplier*(batting.dt[[paste0(pre,"_linear_weight")]] + 
-                                                                          lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / 
-                                                           (AB + BB - IBB + SF + HBP)))
+                                                                          lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / PA))
   }
   
   return(batting.dt)
@@ -439,7 +437,7 @@ add_positions <- function(df, id_col="playerID", year_col="yearID") {
   years <- unique(df[,year_col])
   data(Fielding)
   Fielding.subset <- data.table(subset(Fielding, yearID %in% years))
-  if (max(years)>=2017 & max(Fielding$yearID)<=2017) {
+  if (max(years)>=2017 & max(Fielding$yearID)<2017) {
     # R package hasn't been updated w/ 2017 yet
     load("./lahman.fielding.2017.RData")
     Fielding.subset <- rbind(Fielding.subset, lahman.fielding.2017)
@@ -456,5 +454,202 @@ add_positions <- function(df, id_col="playerID", year_col="yearID") {
   df <- merge(x=df, y=grouped[,c("playerID","POS")], by.x=id_col, by.y="playerID", all.x=TRUE)
   return(df)
 }
+
+
+marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=year,
+                               pred_df_year_col="yearID", pred_df_id_col="playerID",
+                               verbose=FALSE) {
+  require(Lahman)
+  require(data.table)
   
+  if (!is.null(pred_df) & is.null(model_prefix)) {
+    print("Must specify which model's predictions to use in 'model' parameter.")
+    return(NULL)
+  }
   
+  # get league average data by year for past three years
+  past.years <- c(year-3,year-2,year-1)
+  data(Batting)
+  batting.sub <- subset(Batting, yearID %in% past.years)
+  if (max(past.years)>=2017 & max(batting.sub$yearID)<2017) {
+    # R package hasn't been updated w/ 2017 yet
+    load("./lahman.batting.2017.RData")
+    batting.sub <- rbind(batting.sub, lahman.batting.2017)
+  }
+  batting.sub <- add_positions(batting.sub)
+  batting.sub <- subset(batting.sub, POS!="P")  # exclude pitchers from league average hitting stats
+  batting.sub <- data.table(batting.sub)
+  batting.sub <- batting.sub[,list(AB=sum(AB),H=sum(H),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
+                                   BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
+                                   SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP))
+                             ,by=list(playerID,yearID)]  # combined stats for players who changed teams
+  
+  ### decision point: should league averages be computed from actual stats, or expected  ###
+  ###                 stats from models? currently using actual stats                    ###
+  sdcols <- colnames(batting.sub)[!(colnames(batting.sub) %in% c("playerID","yearID"))]
+  league.avg <- batting.sub[,lapply(.SD,sum), by=list(yearID), .SDcols=sdcols]
+  league.avg <- data.frame(setorder(league.avg, -yearID))  # year-1, then year-2, then year-3
+  
+  # for easy lookup:
+  batting.sub <- data.frame(batting.sub)
+  rownames(batting.sub) <- with(batting.sub, paste0(playerID,"_",yearID))
+  
+  # create projections for all players (non-pitchers) with batting data in previous season
+  marcel.df <- data.frame(yearID=year, playerID=subset(batting.sub, yearID==year-1)$playerID)
+  marcel.df <- add_player_age(marcel.df)
+  
+  if (is.null(pred_df)) {
+    # only use Lahman data
+    prev1 <- subset(batting.sub, yearID==year-1)
+    prev2 <- subset(batting.sub, yearID==year-2)
+    prev3 <- subset(batting.sub, yearID==year-3)
+  }
+  else {
+    pred_df <- data.frame(pred_df)
+    colnames(pred_df)[colnames(pred_df)==pred_df_year_col] <- "yearID"
+    colnames(pred_df)[colnames(pred_df)==pred_df_id_col] <- "playerID"
+    
+    # remove pitchers
+    pred_df <- add_positions(pred_df)
+    pred_df <- subset(pred_df, POS!="P")
+    
+    # do some formatting so we have the same columns as batting.sub for later operations
+    cols <- c("playerID","yearID",paste0(model_prefix,"_",c("single","double","triple","home_run")),
+              "PA","BB","IBB","HBP","SF","SH","SO","SB")
+    pred_df <- pred_df[,cols]
+    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_single")] <- "X1B"
+    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_double")] <- "X2B"
+    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_triple")] <- "X3B"
+    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_home_run")] <- "HR"
+    rownames(pred_df) <- with(pred_df, paste0(playerID,"_",yearID))
+    
+    # (tried doing this with ifelse and it didn't work)
+    pred.years <- unique(pred_df$yearID)
+    if ((year-1) %in% pred.years) { prev1 <- subset(pred_df, yearID==year-1) }
+    else { prev1 <- subset(batting.sub, yearID==year-1) }
+    if ((year-2) %in% pred.years) { prev2 <- subset(pred_df, yearID==year-2) }
+    else { prev2 <- subset(batting.sub, yearID==year-2) }
+    if ((year-3) %in% pred.years) { prev3 <- subset(pred_df, yearID==year-3) }
+    else { prev3 <- subset(batting.sub, yearID==year-3) }
+    
+    if (verbose==TRUE){
+      for (i in 1:3) {
+        if (!((year-i) %in% pred.years)) { print(paste0(year-i," from Lahman")) }
+      }
+    }
+  }
+  
+  # Expected PA: (.5*prev1) + (.1*prev2) + 200
+  # If data is missing (player didn't play that year), count as 0
+  PA1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),"PA"]),
+                prev1[paste0(marcel.df$playerID,"_",year-1),"PA"],
+                0)
+  PA2 <- ifelse(!is.na(prev2[paste0(marcel.df$playerID,"_",year-2),"PA"]),
+                prev2[paste0(marcel.df$playerID,"_",year-2),"PA"],
+                0)
+  PA3 <- ifelse(!is.na(prev3[paste0(marcel.df$playerID,"_",year-3),"PA"]),
+                prev3[paste0(marcel.df$playerID,"_",year-3),"PA"],
+                0)
+  marcel.df$xPA <- 0.5*PA1 + 0.1*PA2 + 200
+  
+  # Expected values for other stats:
+  #  - weight value from previous 3 seasons as 5/4/3 (:= weighted.val)
+  #  - weight PAs from previous 3 seasons as 5/4/3 (:= weighted.PAs)
+  #  - prorate league average stats to player's number of PAs, then weight as 5/4/3
+  #  - calculate player's league average rate as weighted value / # of PAs
+  #  - prorate this leave average to 1200 ABs (:= weighted.avg)
+  #  - calculate projected rate: (weighted.avg + weighted.val) / (1200 + weighted.PAs)
+  #  - multiply projected rate by projected PAs
+  #  - age adjustment: multiply projected values by 1 + [(29 - age) * .006]
+  
+  weighted.PAs <- 5*PA1 + 4*PA2 + 3*PA3
+  age.adjust <- (29 - marcel.df$age) * 0.006
+  for (val in c("X1B","X2B","X3B","HR","BB","IBB","HBP","SF","SH")) {
+    val1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),val]),
+                   prev1[paste0(marcel.df$playerID,"_",year-1),val],
+                   0)
+    val2 <- ifelse(!is.na(prev2[paste0(marcel.df$playerID,"_",year-2),val]),
+                   prev2[paste0(marcel.df$playerID,"_",year-2),val],
+                   0)
+    val3 <- ifelse(!is.na(prev3[paste0(marcel.df$playerID,"_",year-3),val]),
+                   prev3[paste0(marcel.df$playerID,"_",year-3),val],
+                   0)
+    weighted.val <- 5*val1 + 4*val2 + 3*val3
+    weighted.avg <- (5*PA1*league.avg[1,val]/league.avg[1,"PA"] 
+                     + 4*PA2*league.avg[2,val]/league.avg[2,"PA"]
+                     + 3*PA3*league.avg[3,val]/league.avg[3,"PA"])
+    weighted.avg <- weighted.avg/weighted.PAs * 1200
+    rate <- (weighted.avg + weighted.val) / (1200 + weighted.PAs)
+    
+    marcel.df[,paste0("x",val)] <- rate * marcel.df$xPA * (1 + age.adjust)
+  }
+  
+  # compute additional projected stats
+  marcel.df$xAB   <- with(marcel.df, xPA - (xBB+xSF+xSH+xHBP))
+  marcel.df$xH    <- with(marcel.df, xX1B+xX2B+xX3B+xHR)
+  marcel.df$xBA   <- with(marcel.df, xH/xAB)
+  marcel.df$xOBP  <- with(marcel.df, (xH+xBB+xHBP)/xPA)
+  marcel.df$xSLG  <- with(marcel.df, (xX1B + 2*xX2B + 3*xX3B + 4*xHR)/xAB)
+  marcel.df$xOPS  <- with(marcel.df, xOBP+xSLG)
+  
+  tmp <- set_linear_weights(lw_years)
+  lw <- tmp$lw
+  lw_multiplier <- tmp$multiplier
+  marcel.df$xwOBA <- with(marcel.df, (lw_multiplier * (lw["walk"]*(xBB-xIBB) + lw["HBP"]*xHBP + 
+                                                         lw["single"]*xX1B + lw["double"]*xX2B + 
+                                                         lw["triple"]*xX3B + lw["home_run"]*xHR) / xPA))
+  return(marcel.df)
+}
+
+
+add_player_age <- function(df, id_col="playerID", year_col="yearID") {
+  require(Lahman)
+  data(Batting)
+  data(Master)
+  
+  cols <- c("playerID","birthYear","birthMonth","birthDay")
+  birthdate.df <- Master[cols]
+  df <- data.frame(df)
+  if (max(df[,year_col])>=2017 & max(Batting$yearID)<2017) {
+    # R package hasn't been updated w/ 2017 yet
+    load("./lahman.master.2017.RData")
+    birthdate.df <- rbind(birthdate.df, lahman.master.2017[cols])
+  }
+  birthdate.df <- unique(birthdate.df)
+  
+  tmp <- merge(df[,c(id_col,year_col)], birthdate.df, by.x=id_col, by.y="playerID", all.x=TRUE)
+  tmp$age <- ifelse(tmp$birthMonth<7, tmp[,year_col]-tmp$birthYear, tmp[,year_col]-tmp$birthYear-1)
+  
+  return(merge(df, tmp[c(id_col,year_col,"age")], by=c(id_col,year_col), all.x=TRUE))
+}
+
+
+get_eval_df <- function(year, lw_years=year, pred_df, prefixes=get_prefixes(pred_df,type='full')) {
+  require(Lahman)
+  data(Batting)
+  
+  # 'vals' will be true stats for that year
+  vals <- Batting
+  if (year>=2017 & max(Batting$yearID<2017)) {
+    load("./lahman.batting.2017.RData")
+    vals <- rbind(Batting, lahman.batting.2017)
+  }
+  vals <- subset(vals, yearID==year)
+  vals$PA  <- with(vals, AB+BB+SF+SH+HBP)
+  vals$X1B <- with(vals, H-X2B-X3B-HR)
+  vals$BA  <- with(vals, H/AB)
+  vals$OBP <- with(vals, (H+BB+HBP)/PA)
+  vals$SLG <- with(vals, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
+  vals$OPS <- with(vals, OBP+SLG)
+  tmp <- set_linear_weights(lw_years)
+  lw <- tmp$lw
+  lw_multiplier <- tmp$multiplier
+  vals$wOBA <- with(vals, (lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
+                                              lw["single"]*X1B + lw["double"]*X2B + 
+                                              lw["triple"]*X3B + lw["home_run"]*HR) / PA))
+  vals <- vals[c("playerID","yearID","")]
+  
+  marcel <- marcel_projections(year, lw_years=lw_years)
+  df <- merge(x=marcel, y=vals, by)
+}
+
