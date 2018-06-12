@@ -4,7 +4,6 @@
 .Ruserdata
 all_pitches_by_batter_2015-2017.csv
 batted_balls_2015-2017.csv
-lahman.batting.2017.RData
-lahman.master.2017.RData
 rf_models_032518.RData
 save_032518.RData
+rf_models_060318.RData

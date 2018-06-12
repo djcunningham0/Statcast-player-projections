@@ -89,16 +89,21 @@ format_data_frame <- function(df,lw) {
   return(batted)
 }
 
+#' @param years vector of years (take average of coefficients across these years)
 #' 
 #' @return linear weight values and the multiplier to convert to OBP scale
 #' 
-set_linear_weights <- function() {
+set_linear_weights <- function(years=2017) {
   # add linear weight values
   # linear weights reference: https://www.fangraphs.com/library/principles/linear-weights/
   # values from https://www.fangraphs.com/guts.aspx?type=cn
   # currently using 2017 values
-  multiplier <- 1.185
-  lw <- c(0,0.877,1.232,1.552,1.980,0.693,0.723)/multiplier  # out,single,double,triple,home_run,walk,HBP
+  lw.df <- read.csv("./linear weights by year.csv")
+  lw.df <- subset(lw.df, Season %in% years)
+  
+  multiplier <- mean(lw.df$wOBAScale)
+  # out,single,double,triple,home_run,walk,HBP
+  lw <- with(lw.df, c(0, mean(w1B), mean(w2B), mean(w3B), mean(wHR), mean(wBB), mean(wHBP))/multiplier)
   names(lw) <- c("out","single","double","triple","home_run","walk","HBP")
   
   return(list(lw=lw, multiplier=multiplier))
@@ -184,33 +189,39 @@ fit_knn_classification_model <- function(df, k, trainSize, seed=NULL) {
 
 #' 
 #' @param df data frame (batted)
-#' @param lwCols vector of prefixes for models with linear weight predictions
-#' @param fullCols vector of prefixes for models with full predictions
+#' @param lw.prefixes vector of prefixes for models with linear weight predictions
+#' @param full.prefixes vector of prefixes for models with full predictions
 #' @param by_month set to TRUE to group data by year and month
 #' 
 #' @return a data table grouped by player and year with linear weights and predicted linear weights
 #' 
-group_weights_by_year <- function(df, lwCols, fullCols, by_month=FALSE) {
+group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_month=FALSE) {
   require(data.table)
+  
+  if (is.null(lw.prefixes)) { lw.prefixes <- get_prefixes(df, type="lw") }
+  if (is.null(full.prefixes)) { full.prefixes <- get_prefixes(df, type="full") }
+  
   cols <- c()
-  for (pre in lwCols) {
+  for (pre in lw.prefixes) {
     cols <- c(cols, paste0(pre,"_linear_weight"))
-    if (pre %in% fullCols) {
+    if (pre %in% full.prefixes) {
       cols <- c(cols, paste0(pre,"_",c("single","double","triple","home_run")))
     }
   }
   
   if (by_month==TRUE) {
-    weights.dt <- data.table(df[c("lahman_id","batter","game_year","game_month","linear_weight",cols)])
+    weights.dt <- data.table(df[c("lahman_id","batter","game_year","game_month",
+                                  "Spd","linear_weight",cols)])
     colnames(weights.dt)[colnames(weights.dt)=="batter"] <- "mlb_id"
     # .SD is a subset with all columns except the grouping columns
-    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year,game_month)]
+    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year,game_month,Spd)]
   }
   else {
-    weights.dt <- data.table(df[c("lahman_id","batter","game_year","linear_weight",cols)])
+    weights.dt <- data.table(df[c("lahman_id","batter","game_year"
+                                  ,"Spd","linear_weight",cols)])
     colnames(weights.dt)[colnames(weights.dt)=="batter"] <- "mlb_id"
     # .SD is a subset with all columns except the grouping columns
-    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year)]
+    weights.dt <- weights.dt[,lapply(.SD,sum),by=list(lahman_id,mlb_id,game_year,Spd)]
   }
   
   return(weights.dt)
@@ -219,13 +230,16 @@ group_weights_by_year <- function(df, lwCols, fullCols, by_month=FALSE) {
 
 #' 
 #' @param weights.dt data.table of weights from group_weights_by_year
-#' @param lwCols vector of prefixes for models with linear weight predictions
-#' @param fullCols vector of prefixes for models with full predictions
+#' @param lw.prefixes vector of prefixes for models with linear weight predictions
+#' @param full.prefixes vector of prefixes for models with full predictions
 #' 
 #' @return a data table grouped by player and year with predicted linear weights and wOBA
 #' 
-add_preds_to_yearly_data <- function(weights.dt, lwCols, fullCols) {
+add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes=NULL) {
   require(Lahman)
+  
+  if (is.null(lw.prefixes)) { lw.prefixes <- get_prefixes(weights.dt, type="lw") }
+  if (is.null(full.prefixes)) { full.prefixes <- get_prefixes(weights.dt, type="full") }
   
   minYear <- min(weights.dt$game_year)
   maxYear <- max(weights.dt$game_year)
@@ -267,7 +281,7 @@ add_preds_to_yearly_data <- function(weights.dt, lwCols, fullCols) {
   
   # add predicted wOBA values from models
   # use true values for AB, BB, etc.
-  for (pre in lwCols) {
+  for (pre in lw.prefixes) {
     batting.dt[[paste0(pre,"_wOBA")]] <- with(batting.dt, (lw_multiplier*(batting.dt[[paste0(pre,"_linear_weight")]] + 
                                                                           lw["walk"]*(BB-IBB) + lw["HBP"]*HBP) / 
                                                            (AB + BB - IBB + SF + HBP)))
@@ -369,24 +383,23 @@ color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.
     return(p)
   }
 }
-  
-#' any columns containing "_home_run" have full predictions for that model
-#' 
-#' @param col_names the column names of the batted balls data frame containing model predictions
-#' 
-get_full_prediction_prefixes <- function(col_names) {
-  indices <- grep("_home_run", col_names)
-  full <- col_names[indices]
-  prefix <- sapply(strsplit(full,"_"),'[',1)
-  return(prefix)
-}
 
 #' any columns containing "_linear_weight" have linear weight predictions for that model
+#' any columns containing "_home_run" have full predictions for that model
 #' 
-#' @param col_names the column names of the batted balls data frame containing model predictions
+#' @param batted balls data frame
+#' @param type "lw" for linear weight predictions, "full" for full predictions
 #' 
-get_lw_prediction_prefixes <- function(col_names) {
-  indices <- grep("_linear_weight", col_names)
+#' @return a vector of model prefixes
+#' 
+get_prefixes <- function(df, type="none") {
+  if (type != "lw" & type != "full") {
+    print("Must set type to 'lw' or 'full'.")
+    return(NA)
+  }
+  col_names <- colnames(df)
+  if (type=="lw") { indices <- grep("_linear_weight", col_names) }
+  else { indices <- grep("_home_run", col_names) }
   full <- col_names[indices]
   prefix <- sapply(strsplit(full,"_"),'[',1)
   return(prefix)
@@ -407,8 +420,41 @@ add_speed_scores <- function(batted) {
   
   batted <- merge(batted, speed_scores, by.x=c("batter","game_year"), by.y=c("mlb_id","year"),
                   all.x=TRUE)
+  
   return(batted)
 }
+
+#' get a player's most common position for the years in df
+#' 
+#' @param df data frame to add position to
+#' @param id_col name of column in df with Lahman ID
+#' @param year_col name of column in df with year
+#' 
+#' @return df with POS column for most commonly played position for each player
+#' 
+add_positions <- function(df, id_col="playerID", year_col="yearID") {
+  require(Lahman)
+  require(data.table)
+  df <- data.frame(df)  # in case it's a data.table object (syntax would be different)
+  years <- unique(df[,year_col])
+  data(Fielding)
+  Fielding.subset <- data.table(subset(Fielding, yearID %in% years))
+  if (max(years)>=2017 & max(Fielding$yearID)<=2017) {
+    # R package hasn't been updated w/ 2017 yet
+    load("./lahman.fielding.2017.RData")
+    Fielding.subset <- rbind(Fielding.subset, lahman.fielding.2017)
+  }
   
+  grouped <- Fielding.subset[,list(G=sum(G)),by=list(playerID,POS)]
+  grouped.agg <- aggregate(G ~ playerID, grouped, max)
+  grouped <- merge(grouped, grouped.agg)
+  
+  # if there's a tie, just pick the first line
+  grouped <- grouped[!duplicated(grouped$playerID)]
+  
+  # left join df with grouped fielding table
+  df <- merge(x=df, y=grouped[,c("playerID","POS")], by.x=id_col, by.y="playerID", all.x=TRUE)
+  return(df)
+}
   
   
