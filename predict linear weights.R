@@ -148,14 +148,34 @@ sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
 
 # get Marcel projections --------------------------------------------------
 
-marcel.2017 <- marcel_projections(2017, lw_years=2015:2017)
-marcel.2017.rf <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf", lw_years=2015:2017)
-marcel.2017.rf.speed <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf.speed", lw_years=2015:2017)
-marcel.2017.knn <- marcel_projections(2017, pred_df=batting.dt, model_prefix="knn", lw_years=2015:2017)
-marcel.2017.multinom <- marcel_projections(2017, pred_df=batting.dt, model_prefix="multinom", lw_years=2015:2017)
-marcel.2017.lda <- marcel_projections(2017, pred_df=batting.dt, model_prefix="lda", lw_years=2015:2017)
+# marcel.2017 <- marcel_projections(2017, lw_years=2015:2017)
+# marcel.2017.rf <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf", lw_years=2015:2017)
+# marcel.2017.rf.speed <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf.speed", lw_years=2015:2017)
+# marcel.2017.knn <- marcel_projections(2017, pred_df=batting.dt, model_prefix="knn", lw_years=2015:2017)
+# marcel.2017.multinom <- marcel_projections(2017, pred_df=batting.dt, model_prefix="multinom", lw_years=2015:2017)
+# marcel.2017.lda <- marcel_projections(2017, pred_df=batting.dt, model_prefix="lda", lw_years=2015:2017)
 
+eval.df.2017 <- get_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt)
+eval.df.2017 <- subset(eval.df.2017, AB>=AB_cutoff)
 
+marcel_eval_plot(eval.df.2017, model_desc="Marcel")
+marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF (w/o Spd)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF")
+marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
+marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
+
+eval.df.2016 <- get_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt)
+eval.df.2016 <- subset(eval.df.2016, AB>=AB_cutoff)
+marcel_eval_plot(eval.df.2016, model_desc="Marcel")
+
+# match the analysis here:
+#   https://web.archive.org/web/20080111231423/http://www.baseballprospectus.com/unfiltered/?p=564
+# (Not sure why the correlation is so much higher than for 2017. Is Marcel becoming less reliable
+#  in the new hitting environment? Are other projection systems also becoming less reliable? Was 2016
+#  just a particularly difficult year?)
+eval.df.2007 <- get_eval_df(2007, pred_df=batting.dt, prefixes="rf")
+eval.df.2007 <- subset(eval.df.2007, AB>=150)
+marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 
 
 # future ideas ------------------------------------------------------------

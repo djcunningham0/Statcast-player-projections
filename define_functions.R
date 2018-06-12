@@ -257,7 +257,7 @@ add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes
   # group by playerID and yearID to account for players who changed teams
   batting.dt <- batting.dt[,list(AB=sum(AB),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
                                  BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
-                                 SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP)),
+                                 CS=sum(CS),SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP),R=sum(R),RBI=sum(RBI)),
                            by=list(playerID,yearID)]
   
   # description of wOBA: https://www.fangraphs.com/library/offense/woba/
@@ -320,10 +320,16 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
                               includeCorrelation=TRUE,include_y_equal_x=TRUE) {
   require(ggplot2)
+  require(data.table)
   
-  x <- unname(unlist(data[,x.col,with=FALSE]))
-  y <- unname(unlist(data[,y.col,with=FALSE]))
-  if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",round(cor(x,y),3)) }
+  # data <- data.table(data)
+  # x <- unname(unlist(data[,x.col,with=FALSE]))
+  # y <- unname(unlist(data[,y.col,with=FALSE]))
+  data <- data.frame(data)
+  x <- data[,x.col]
+  y <- data[,y.col]
+  if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
+                                                        round(cor(x,y,use="pair"),3)) }
   
   p <- (ggplot(data=data,aes(x=x,y=y,text=paste0(playerID,"_",yearID)))
            + geom_point(alpha=.75)
@@ -356,16 +362,19 @@ color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.
                               includeCorrelation=TRUE,include_y_equal_x=TRUE,
                               colorBarTitle=color.col) {
   require(ggplot2)
+  require(data.table)
   
   if (is.null(color.col)) {
     # if no color, call basic_scatterplot instead
     return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation,include_y_equal_x))
   }
   else{
+    data <- data.table(data)
     x <- unname(unlist(data[,x.col,with=FALSE]))
     y <- unname(unlist(data[,y.col,with=FALSE]))
     if (!is.null(color.col)) { color <- unname(unlist(data[,color.col,with=FALSE])) }
-    if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",round(cor(x,y),3)) }
+    if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
+                                                          round(cor(x,y,use="pair"),3)) }
     
     p <- (ggplot(data=data,aes(x=x,y=y,color=color,text=paste0(playerID,"_",yearID)))
           + geom_point(alpha=.75)
@@ -481,7 +490,7 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   batting.sub <- data.table(batting.sub)
   batting.sub <- batting.sub[,list(AB=sum(AB),H=sum(H),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
                                    BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
-                                   SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP))
+                                   CS=sum(CS),SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP),R=sum(R),RBI=sum(RBI))
                              ,by=list(playerID,yearID)]  # combined stats for players who changed teams
   
   ### decision point: should league averages be computed from actual stats, or expected  ###
@@ -515,7 +524,7 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
     
     # do some formatting so we have the same columns as batting.sub for later operations
     cols <- c("playerID","yearID",paste0(model_prefix,"_",c("single","double","triple","home_run")),
-              "PA","BB","IBB","HBP","SF","SH","SO","SB")
+              "PA","BB","IBB","HBP","SF","SH","SO","SB","CS","R","RBI")
     pred_df <- pred_df[,cols]
     colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_single")] <- "X1B"
     colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_double")] <- "X2B"
@@ -564,7 +573,7 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   
   weighted.PAs <- 5*PA1 + 4*PA2 + 3*PA3
   age.adjust <- (29 - marcel.df$age) * 0.006
-  for (val in c("X1B","X2B","X3B","HR","BB","IBB","HBP","SF","SH")) {
+  for (val in c("X1B","X2B","X3B","HR","BB","IBB","HBP","SF","SH","SO","SB","CS","R","RBI")) {
     val1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),val]),
                    prev1[paste0(marcel.df$playerID,"_",year-1),val],
                    0)
@@ -598,6 +607,7 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   marcel.df$xwOBA <- with(marcel.df, (lw_multiplier * (lw["walk"]*(xBB-xIBB) + lw["HBP"]*xHBP + 
                                                          lw["single"]*xX1B + lw["double"]*xX2B + 
                                                          lw["triple"]*xX3B + lw["home_run"]*xHR) / xPA))
+  marcel.df$playerID <- as.character(marcel.df$playerID)
   return(marcel.df)
 }
 
@@ -625,7 +635,27 @@ add_player_age <- function(df, id_col="playerID", year_col="yearID") {
 
 
 get_eval_df <- function(year, lw_years=year, pred_df, prefixes=get_prefixes(pred_df,type='full')) {
+  marcel <- marcel_projections(year, lw_years=lw_years)
+  vals <- get_true_stats(year, playerIDs=marcel$playerID, lw_years=lw_years)
+  
+  # combine true stats and Marcel projections
+  df <- merge(x=vals, y=marcel, by=c("playerID","yearID","age"), all=TRUE)
+  
+  # now add adjusted Marcel projections
+  for (pre in prefixes) {
+    marcel.adj <- marcel_projections(year=year, pred_df=pred_df, model_prefix=pre, lw_years=lw_years)
+    df <- merge(x=df, y=marcel.adj, by=c("playerID","yearID","age"), all=TRUE)
+    colnames(df) <- gsub(".x","",colnames(df),fixed=TRUE)
+    colnames(df) <- gsub(".y",paste0("_",pre),colnames(df),fixed=TRUE)
+  }
+  
+  return(df)
+}
+
+
+get_true_stats <- function(year, playerIDs=NULL, lw_years=year) {
   require(Lahman)
+  require(data.table)
   data(Batting)
   
   # 'vals' will be true stats for that year
@@ -635,8 +665,19 @@ get_eval_df <- function(year, lw_years=year, pred_df, prefixes=get_prefixes(pred
     vals <- rbind(Batting, lahman.batting.2017)
   }
   vals <- subset(vals, yearID==year)
+  if (!is.null(playerIDs)) { vals <- subset(vals, playerID %in% playerIDs) }
+  
+  # group by playerID to get totals for players who were on multiple teams
+  vals <- data.table(vals)
+  vals <- vals[,list(AB=sum(AB),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
+                     BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
+                     CS=sum(CS),SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP),R=sum(R),RBI=sum(RBI))
+               ,by=list(playerID,yearID)]
+  
+  vals <- add_player_age(vals)
+  
   vals$PA  <- with(vals, AB+BB+SF+SH+HBP)
-  vals$X1B <- with(vals, H-X2B-X3B-HR)
+  vals$H   <- with(vals, X1B+X2B+X3B+HR)
   vals$BA  <- with(vals, H/AB)
   vals$OBP <- with(vals, (H+BB+HBP)/PA)
   vals$SLG <- with(vals, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
@@ -647,9 +688,29 @@ get_eval_df <- function(year, lw_years=year, pred_df, prefixes=get_prefixes(pred
   vals$wOBA <- with(vals, (lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
                                               lw["single"]*X1B + lw["double"]*X2B + 
                                               lw["triple"]*X3B + lw["home_run"]*HR) / PA))
-  vals <- vals[c("playerID","yearID","")]
   
-  marcel <- marcel_projections(year, lw_years=lw_years)
-  df <- merge(x=marcel, y=vals, by)
+  vals <- vals[c("playerID","yearID","age","PA","X1B","X2B","X3B","HR","BB","IBB","HBP",
+                 "SF","SH","AB","H","BA","OBP","SLG","OPS","wOBA")]
+  return(vals)
+}
+
+
+marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS","wOBA"),
+                             model_desc=NULL) {
+  if (model_prefix!="") { model_prefix <- paste0("_",model_prefix) }
+  if (is.null(model_desc)) { ylabs <- paste0("x",stats,model_prefix) }
+  else { ylabs <- paste0(model_desc," ",stats)}
+
+  require(gridExtra)
+  p1 <- basic_scatterplot(data=eval_df, x.col=stats[1], y.col=paste0("x",stats[1],model_prefix),
+                          xlab=stats[1], ylab=ylabs[1])
+  p2 <- basic_scatterplot(data=eval_df, x.col=stats[2], y.col=paste0("x",stats[2],model_prefix),
+                          xlab=stats[2], ylab=ylabs[2])
+  p3 <- basic_scatterplot(data=eval_df, x.col=stats[3], y.col=paste0("x",stats[3],model_prefix),
+                          xlab=stats[3], ylab=ylabs[3])
+  p4 <- basic_scatterplot(data=eval_df, x.col=stats[4], y.col=paste0("x",stats[4],model_prefix),
+                          xlab=stats[4], ylab=ylabs[4])
+  grid.arrange(p1,p2,p3,p4)
+  # return(list(p1,p2,p3,p4))
 }
 
