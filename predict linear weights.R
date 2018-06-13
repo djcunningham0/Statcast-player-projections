@@ -167,14 +167,17 @@ marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 eval.df.2016 <- get_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt)
 eval.df.2016 <- subset(eval.df.2016, AB>=AB_cutoff)
 marcel_eval_plot(eval.df.2016, model_desc="Marcel")
+marcel_eval_plot(eval.df.2016, model_prefix="rf.speed", model_desc="RF")
+marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 
 # match the analysis here:
 #   https://web.archive.org/web/20080111231423/http://www.baseballprospectus.com/unfiltered/?p=564
+#   (Nate Silver got 0.591 correlation with OPS for Marcel projections)
 # (Not sure why the correlation is so much higher than for 2017. Is Marcel becoming less reliable
 #  in the new hitting environment? Are other projection systems also becoming less reliable? Was 2016
 #  just a particularly difficult year?)
 eval.df.2007 <- get_eval_df(2007, pred_df=batting.dt, prefixes="rf")
-eval.df.2007 <- subset(eval.df.2007, AB>=150)
+eval.df.2007 <- subset(eval.df.2007, AB>=AB_cutoff)
 marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 
 

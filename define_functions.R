@@ -696,21 +696,43 @@ get_true_stats <- function(year, playerIDs=NULL, lw_years=year) {
 
 
 marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS","wOBA"),
-                             model_desc=NULL) {
+                             model_desc=NULL, xlabs=NULL, titles=NULL) {
+  require(gridExtra)
+  
   if (model_prefix!="") { model_prefix <- paste0("_",model_prefix) }
   if (is.null(model_desc)) { ylabs <- paste0("x",stats,model_prefix) }
   else { ylabs <- paste0(model_desc," ",stats)}
-
-  require(gridExtra)
-  p1 <- basic_scatterplot(data=eval_df, x.col=stats[1], y.col=paste0("x",stats[1],model_prefix),
-                          xlab=stats[1], ylab=ylabs[1])
-  p2 <- basic_scatterplot(data=eval_df, x.col=stats[2], y.col=paste0("x",stats[2],model_prefix),
-                          xlab=stats[2], ylab=ylabs[2])
-  p3 <- basic_scatterplot(data=eval_df, x.col=stats[3], y.col=paste0("x",stats[3],model_prefix),
-                          xlab=stats[3], ylab=ylabs[3])
-  p4 <- basic_scatterplot(data=eval_df, x.col=stats[4], y.col=paste0("x",stats[4],model_prefix),
-                          xlab=stats[4], ylab=ylabs[4])
-  grid.arrange(p1,p2,p3,p4)
+  if (is.null(xlabs)) { xlabs <- stats }
+  if (is.null(titles)) { titles <- paste0(max(eval_df$yearID)," ",ylabs," vs. ",xlabs) }
+  
+  n <- length(stats)
+  if (n > 4) {
+    return("Too many statistics listed. Limit is 4.")
+  }
+  if (!(n==length(xlabs) & n==length(ylabs) & n==length(titles))) {
+    return("Number of labels or titles does not match number of statistics.")
+  }
+  
+  out <- list()
+  for (i in 1:4) {
+    if (n >= i) {
+      p <- basic_scatterplot(data=eval_df, x.col=stats[i], y.col=paste0("x",stats[i],model_prefix),
+                             xlab=xlabs[i], ylab=ylabs[i], plotTitle=titles[i])
+      out[[i]] <- p
+    }
+  }
+  # p1 <- basic_scatterplot(data=eval_df, x.col=stats[1], y.col=paste0("x",stats[1],model_prefix),
+  #                         xlab=xlabs[1], ylab=ylabs[1], plotTitle=titles[1])
+  # p2 <- basic_scatterplot(data=eval_df, x.col=stats[2], y.col=paste0("x",stats[2],model_prefix),
+  #                         xlab=xlabs[2], ylab=ylabs[2], plotTitle=titles[2])
+  # p3 <- basic_scatterplot(data=eval_df, x.col=stats[3], y.col=paste0("x",stats[3],model_prefix),
+  #                         xlab=xlabs[3], ylab=ylabs[3], plotTitle=titles[3])
+  # p4 <- basic_scatterplot(data=eval_df, x.col=stats[4], y.col=paste0("x",stats[4],model_prefix),
+  #                         xlab=xlabs[4], ylab=ylabs[4], plotTitle=titles[4])
+  # grid.arrange(p1,p2,p3,p4,nrow=2,ncol=2)
   # return(list(p1,p2,p3,p4))
+  nrow <- ifelse(n<=2, 1, 2)
+  ncol <- ifelse(n==1, 1, 2)
+  do.call("grid.arrange", c(out, nrow=nrow, ncol=ncol))
 }
 
