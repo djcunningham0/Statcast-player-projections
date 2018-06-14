@@ -721,16 +721,7 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
       out[[i]] <- p
     }
   }
-  # p1 <- basic_scatterplot(data=eval_df, x.col=stats[1], y.col=paste0("x",stats[1],model_prefix),
-  #                         xlab=xlabs[1], ylab=ylabs[1], plotTitle=titles[1])
-  # p2 <- basic_scatterplot(data=eval_df, x.col=stats[2], y.col=paste0("x",stats[2],model_prefix),
-  #                         xlab=xlabs[2], ylab=ylabs[2], plotTitle=titles[2])
-  # p3 <- basic_scatterplot(data=eval_df, x.col=stats[3], y.col=paste0("x",stats[3],model_prefix),
-  #                         xlab=xlabs[3], ylab=ylabs[3], plotTitle=titles[3])
-  # p4 <- basic_scatterplot(data=eval_df, x.col=stats[4], y.col=paste0("x",stats[4],model_prefix),
-  #                         xlab=xlabs[4], ylab=ylabs[4], plotTitle=titles[4])
-  # grid.arrange(p1,p2,p3,p4,nrow=2,ncol=2)
-  # return(list(p1,p2,p3,p4))
+
   nrow <- ifelse(n<=2, 1, 2)
   ncol <- ifelse(n==1, 1, 2)
   do.call("grid.arrange", c(out, nrow=nrow, ncol=ncol))
