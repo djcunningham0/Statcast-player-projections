@@ -119,6 +119,66 @@ p <- basic_scatterplot(data=sub.lag,x.col="rf.speed_triple.prev",y.col="X3B")
 print(p)
 
 
+
+# single projection system plots ------------------------------------------
+
+steamer.2017 <- read.csv("../projections/Steamer projections 2017.csv")
+steamer.2017 <- add_bbref_and_lahman_ids(steamer.2017)
+
+eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
+eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
+
+marcel_eval_plot(eval.df.2017, model_desc="Marcel")
+marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF (w/o Spd)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF (speed)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.shift", model_desc="RF (shift)")
+marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
+marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
+marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom.shift")
+marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
+
+eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
+marcel_eval_plot(eval.df.2016, model_desc="Marcel")
+marcel_eval_plot(eval.df.2016, model_prefix="rf.speed", model_desc="RF")
+marcel_eval_plot(eval.df.2016, model_prefix="rf.shift", model_desc="RF (shift)")
+marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF (w/o speed)")
+marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
+
+# match the analysis here:
+#   https://web.archive.org/web/20080111231423/http://www.baseballprospectus.com/unfiltered/?p=564
+#   (Nate Silver got 0.591 correlation with OPS for Marcel projections)
+# (Not sure why the correlation is so much higher than for 2017. Is Marcel becoming less reliable
+#  in the new hitting environment? Are other projection systems also becoming less reliable? Was 2016
+#  just a particularly difficult year?)
+eval.df.2007 <- get_marcel_eval_df(2007, AB_cutoff=100)
+marcel_eval_plot(eval.df.2007, model_desc="Marcel")
+
+
+# projection system comparison --------------------------------------------
+
+# visualize correlation, MAE, and RMSE in a plot
+scaled.2017.wOBA <- scale_eval_summary(summary.2017.wOBA)
+scaled.2017.OPS <- scale_eval_summary(summary.2017.OPS)
+
+reshaped.2017.wOBA <- reshape_eval_summary(scaled.2017.wOBA)
+reshaped.2017.OPS <- reshape_eval_summary(scaled.2017.OPS)
+
+plot.sub.wOBA <- subset(reshaped.2017.wOBA, method %in% c("marcel","steamer","multinom","rf.speed"))
+plot.sub.wOBA$method <- factor(plot.sub.wOBA$method)
+levels(plot.sub.wOBA$method) <- c("Marcel","MLR Marcel","RF Marcel","Steamer")
+levels(plot.sub.wOBA$variable) <- c("Correlation","MAE","RMSE")
+
+p <- (ggplot(data=plot.sub.wOBA, aes(x=variable, y=value, color=method))
+      + geom_point(size=5)
+      + labs(x="", y="scaled value", title="Relative Accuracy of \nProjections")
+      + theme(legend.title=element_blank())
+      + theme(legend.key.size=unit(12,'mm'))
+      + theme(text=element_text(size=24))
+      + theme(plot.title=element_text(hjust=0.5, size=36))
+      + ylim(-1,1)
+); print(p)
+
+
 # for Saberseminar abstract submission ------------------------------------
 
 p1 <- basic_scatterplot(data=sub.lag,x.col="wOBA.prev",y.col="wOBA",

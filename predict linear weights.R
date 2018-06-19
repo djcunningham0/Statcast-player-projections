@@ -4,7 +4,7 @@ source("./define_functions.R")
 
 
 # prepare data frames -----------------------------------------------------
-
+print("Preparing data frames...")
 # batted_balls_2015-2017.csv comes from 'pull pitch data from statcast.R'
 if (!exists("original_from_csv") || !is.data.frame(get("original_from_csv"))) {
   tryCatch(original_from_csv <- read.csv("batted_balls_2015-2017.csv"),
@@ -27,10 +27,16 @@ batted$lm_linear_weight <- predict(lmod,newdata=batted)
 
 # fit multinomial logistic regression model ----------------------------------------
 
+print("Fitting multinomial...")
 library(nnet)
 mod.multinom <- multinom(class ~ launch_speed + launch_angle + spray_angle, data=batted)
-probs <- predict(mod.multinom,newdata=batted,type="prob")
-batted <- add_preds_from_probs("multinom", batted, probs, lw)
+probs.multinom <- predict(mod.multinom,newdata=batted,type="prob")
+batted <- add_preds_from_probs("multinom", batted, probs.multinom, lw)
+
+# this made almost no difference
+# mod.multinom.shift <- multinom(class ~ launch_speed + launch_angle + spray_angle + shift, data=batted)
+# probs <- predict(mod.multinom.shift,newdata=batted,type="prob")
+# batted <- add_preds_from_probs("multinom.shift", batted, probs, lw)
 
 # mod.multinom.stand <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
 # probs.stand <- predict(mod.multinom.stand,newdata=batted,type="prob")
@@ -48,24 +54,29 @@ batted <- add_preds_from_probs("multinom", batted, probs, lw)
 
 # fit LDA model -----------------------------------------------------------
 
-library(MASS)
-mod.lda <- lda(class ~ launch_speed + launch_angle + spray_angle, data=batted)
-probs.lda <- predict(mod.lda,newdata=batted)$posterior
-batted <- add_preds_from_probs("lda", batted, probs.lda, lw)
+# library(MASS)
+# mod.lda <- lda(class ~ launch_speed + launch_angle + spray_angle, data=batted)
+# probs.lda <- predict(mod.lda,newdata=batted)$posterior
+# batted <- add_preds_from_probs("lda", batted, probs.lda, lw)
 
 
 # fit random forest models ------------------------------------------------
 
+# might want to experiment with nodesize > 1 to make fitting faster
+
+print("Fitting random forest...")
 ### Need to fit new models with all of the data ###
 library(randomForest)
-# load("./rf_models_032518.RData")
-load("./rf_models_060318.RData")
 
-# set.seed(1)
-# which.train <- sample(1:dim(batted)[1],1e5)
-# train <- batted[which.train,]
+load("./rf.RData")
+load("./rf.speed.RData")
+load("./rf.shift.RData")
+set.seed(1)
+which.train <- sample(1:dim(batted)[1],1e5)
+train <- batted[which.train,]
 # rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle, data=train)
 # rf.speed <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd, data=train)
+# rf.shift <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + shift, data=train)
 
 probs.rf <- predict(rf, newdata=batted, type="prob")
 batted <- add_preds_from_probs("rf", batted, probs.rf, lw)
@@ -73,22 +84,16 @@ batted <- add_preds_from_probs("rf", batted, probs.rf, lw)
 probs.rf.speed <- predict(rf.speed, newdata=batted, type="prob")
 batted <- add_preds_from_probs("rf.speed", batted, probs.rf.speed, lw)
 
-# rf2017.class <- randomForest(class ~ launch_speed + launch_angle + spray_angle, data=batted2017)
-# rf2017.class.stand <- randomForest(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted2017)
-# rf2017.class.home <- randomForest(class ~ launch_speed + launch_angle + spray_angle + home_team, data=batted2017)
+probs.rf.shift <- predict(rf.shift, newdata=batted, type="prob")
+batted <- add_preds_from_probs("rf.shift", batted, probs.rf.shift, lw)
 
-# predict linear weight from classification model by taking dot prodict with linear weights vector
-# probs.rf <- predict(rf2017.class,newdata=batted,type="prob")
-# batted <- add_preds_from_probs("rf", batted, probs.rf, lw)
-
-# predict linear weight from regression model
-# batted$rf2_linear_weight <- predict(rf2017,newdata=batted)
-
-
+probs.rf.shift.2 <- predict(rf.shift.2, newdata=batted, type="prob")
+batted <- add_preds_from_probs("rf.shift.2", batted, probs.rf.shift.2, lw)
 
 
 # fit kNN model -----------------------------------------------------------
 
+print("Fitting kNN...")
 library(caret)
 
 # tune k with 'knn cross validation.R'
@@ -96,27 +101,27 @@ library(caret)
 
 # currently fitting model on half the data
 # could fit on all data, but would need to re-tune k and it won't make much difference
-knnmod.class <- fit_knn_classification_model(batted, k=50, trainSize=0.5, seed=1)
-probs.knn <- predict(knnmod.class,newdata=batted,type="prob")
+# knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
+load("./knnmod.RData")
+probs.knn <- predict(knnmod,newdata=batted,type="prob")
 probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
 batted <- add_preds_from_probs("knn", batted, probs.knn, lw)
 
-# knnmod.reg <- fit_knn_regression_model(batted, k=50, trainSize=0.5, seed=1)
-# batted$knn2_linear_weight <- predict(knnmod, newdata=batted)
 
 # fit other models --------------------------------------------------------
 
 # Ideas:
 # use methods in caret package: http://topepo.github.io/caret/train-models-by-tag.html#Tree_Based_Model 
 # see this website for info and examples for a lot of these: https://www.analyticsvidhya.com/blog/2017/09/common-machine-learning-algorithms/
-# - Naive Bayes (probabilities for each class)
+# - Naive Bayes
 # - SVM?
 # - XGBoost (boosted trees. use method="xgbTree" or "xgbLinear")
 # - somehow account for the fact that the RF model underestimates wOBA for faster players
 # - add age into the model, or adjust for future year's prediction
 # - mixed effect vesion of multinomial model
-# 
-# add speed scores to all models
+
+
+print("Done fitting models.")
 
 # group linear weights by player ------------------------------------------
 
@@ -136,38 +141,32 @@ batting.dt <- add_preds_to_yearly_data(weights.dt)#, lw.prefixes, full.prefixes)
 AB_cutoff <- 150
 sub.oneyear <- subset(batting.dt,AB>=AB_cutoff)
 
-lmod.rf <- lm(wOBA ~ rf_wOBA + Spd, data=sub.oneyear)
-lmod.knn <- lm(wOBA ~ knn_wOBA + Spd, data=sub.oneyear)
-
-batting.dt$rf.lmod_wOBA <- predict(lmod.rf, newdata=batting.dt)
-batting.dt$knn.lmod_wOBA <- predict(lmod.knn, newdata=batting.dt)
-
 batting_lagged <- lag_yearly_data(batting.dt)
 sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
 
 
 # get Marcel projections --------------------------------------------------
 
-# marcel.2017 <- marcel_projections(2017, lw_years=2015:2017)
-# marcel.2017.rf <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf", lw_years=2015:2017)
-# marcel.2017.rf.speed <- marcel_projections(2017, pred_df=batting.dt, model_prefix="rf.speed", lw_years=2015:2017)
-# marcel.2017.knn <- marcel_projections(2017, pred_df=batting.dt, model_prefix="knn", lw_years=2015:2017)
-# marcel.2017.multinom <- marcel_projections(2017, pred_df=batting.dt, model_prefix="multinom", lw_years=2015:2017)
-# marcel.2017.lda <- marcel_projections(2017, pred_df=batting.dt, model_prefix="lda", lw_years=2015:2017)
+steamer.2017 <- read.csv("../projections/Steamer projections 2017.csv")
+steamer.2017 <- add_bbref_and_lahman_ids(steamer.2017)
 
-eval.df.2017 <- get_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt)
-eval.df.2017 <- subset(eval.df.2017, AB>=AB_cutoff)
+eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
+eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
 
 marcel_eval_plot(eval.df.2017, model_desc="Marcel")
 marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF (w/o Spd)")
-marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF (speed)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.shift", model_desc="RF (shift)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.shift.2", model_desc="RF (shift 2)")
 marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
+marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 
-eval.df.2016 <- get_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt)
-eval.df.2016 <- subset(eval.df.2016, AB>=AB_cutoff)
+eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
 marcel_eval_plot(eval.df.2016, model_desc="Marcel")
 marcel_eval_plot(eval.df.2016, model_prefix="rf.speed", model_desc="RF")
+marcel_eval_plot(eval.df.2016, model_prefix="rf.shift", model_desc="RF (shift)")
+marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF (w/o speed)")
 marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 
 # match the analysis here:
@@ -176,10 +175,19 @@ marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 # (Not sure why the correlation is so much higher than for 2017. Is Marcel becoming less reliable
 #  in the new hitting environment? Are other projection systems also becoming less reliable? Was 2016
 #  just a particularly difficult year?)
-eval.df.2007 <- get_eval_df(2007, pred_df=batting.dt, prefixes="rf")
-eval.df.2007 <- subset(eval.df.2007, AB>=AB_cutoff)
+eval.df.2007 <- get_marcel_eval_df(2007, AB_cutoff=100)
 marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 
+
+
+# evaluate Marcel projections ---------------------------------------------
+
+summary.2017.wOBA <- create_eval_summary(eval.df.2017)
+summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
+
+# library(knitr)
+# kable(summary.2017.wOBA, digits=3)
+# kable(summary.2017.wOBA, digits=3, format="latex")
 
 # future ideas ------------------------------------------------------------
 # - more models
@@ -204,14 +212,14 @@ marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 #     https://www.beyondtheboxscore.com/2017/1/8/14189138/pecota-zips-steamer-marcel-projection-systems-graded
 #   - or here:
 #     https://web.archive.org/web/20080111231423/http://www.baseballprospectus.com/unfiltered/?p=564
+# - should I account for shifts? Statcast data has if_fielding_alignment
   
 
 
 
 
 # to do -------------------------------------------------------------------
-# - calculate or download Marcel projections
-# - look up Bill James aging curve
+
 
 
 

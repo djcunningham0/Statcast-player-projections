@@ -42,7 +42,9 @@ format_data_frame <- function(df,lw) {
             # "game_pk",
             # "launch_speed_angle",
             "babip_value",  # use babip_value and iso_value to classify out, single, double, etc.
-            "iso_value")
+            "iso_value",
+            "if_fielding_alignment",
+            "of_fielding_alignment")
   batted <- df[keep]
   
   # only keep regular season games
@@ -64,6 +66,16 @@ format_data_frame <- function(df,lw) {
   batted <- add_speed_scores(batted)
   
   batted$babip_iso <- as.factor(with(batted,paste0(babip_value,"_",iso_value)))
+  
+  # identify infield shifts and separate by L/R
+  #  - shifts are defined as three infielders on one side of second base
+  #  - need to separate by L/R because that determines which side of second base
+  #  - I'm not including the "Strategic" category because is not precisely defined
+  batted$shift <- ifelse(batted$if_fielding_alignment == "Infield shift",
+                         paste0(batted$stand,"_Infield shift"),
+                         "Standard")
+  batted$shift[is.na(batted$shift)] <- "Standard"
+  batted$shift <- factor(batted$shift, levels=c("Standard","L_Infield shift","R_Infield shift"))
   
   # classify events into out/single/double/triple/HR
   batted$class <- batted$babip_iso
@@ -144,35 +156,17 @@ add_preds_from_probs <- function(prefix, df, probs, lw) {
 #' @param k value of k to use
 #' @param trainSize proportion of data to use for training the model
 #' @param seed seed to set
-#' 
-#' @return a kNN regression model
-#' 
-fit_knn_regression_model <- function(df, k, trainSize, seed=NULL) {
-  require(caret)
-  
-  if (!is.null(seed)) { set.seed(seed) }
-  n <- dim(df)[1]
-  which.train <- sample(1:n,floor(n*trainSize))
-  training <- df[which.train,]
-  
-  fitCtrl <- trainControl(method = "none")
-  knnmod <- train(linear_weight ~ ., data=training[c("linear_weight","launch_speed","launch_angle","spray_angle")],
-                  method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
-                  preProcess=c("scale","center"))
-  
-  return(knnmod)
-}
-
-#' 
-#' @param df data frame
-#' @param k value of k to use
-#' @param trainSize proportion of data to use for training the model
-#' @param seed seed to set
+#' @param type 'classification' to predict class probabilities or 'regression' to predict linear weights
 #' 
 #' @return a kNN classification model
 #' 
-fit_knn_classification_model <- function(df, k, trainSize, seed=NULL) {
+fit_knn_model <- function(df, k, trainSize, seed=NULL, type="classification") {
   require(caret)
+  
+  if (!(type %in% c("classification","regression"))) {
+    print("Must set type to 'classification' or 'regression'.")
+    return(NULL)
+  }
   
   if (!is.null(seed)) { set.seed(seed) }
   n <- dim(df)[1]
@@ -180,10 +174,17 @@ fit_knn_classification_model <- function(df, k, trainSize, seed=NULL) {
   training <- df[which.train,]
   
   fitCtrl <- trainControl(method = "none")
-  knnmod <- train(class ~ ., data=training[c("class","launch_speed","launch_angle","spray_angle")],
-                  method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
-                  preProcess=c("scale","center"))
   
+  if (type=="classification") {
+    knnmod <- train(class ~ ., data=training[c("class","launch_speed","launch_angle","spray_angle")],
+                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
+                    preProcess=c("scale","center"))
+  }
+  else {
+    knnmod <- train(linear_weight ~ ., data=training[c("linear_weight","launch_speed","launch_angle","spray_angle")],
+                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
+                    preProcess=c("scale","center"))
+  }
   return(knnmod)
 }
 
@@ -318,9 +319,15 @@ lag_yearly_data <- function(batting.dt) {
 #' 
 basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE,include_y_equal_x=TRUE) {
+                              includeCorrelation=TRUE,include_y_equal_x=TRUE,
+                              center_title=FALSE, title_size=NULL, text_size=NULL) {
   require(ggplot2)
   require(data.table)
+  
+  text.format <- theme()
+  if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
+  if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
+  if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
   
   # data <- data.table(data)
   # x <- unname(unlist(data[,x.col,with=FALSE]))
@@ -332,8 +339,9 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                                                         round(cor(x,y,use="pair"),3)) }
   
   p <- (ggplot(data=data,aes(x=x,y=y,text=paste0(playerID,"_",yearID)))
-           + geom_point(alpha=.75)
-           + labs(x=xlab,y=ylab,title=plotTitle)
+        + geom_point(alpha=.75)
+        + labs(x=xlab,y=ylab,title=plotTitle)
+        + text.format
   )
   
   if (include_y_equal_x == TRUE) {
@@ -360,18 +368,27 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
 color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
                               includeCorrelation=TRUE,include_y_equal_x=TRUE,
+                              center_title=FALSE, title_size=NULL, text_size=NULL,
                               colorBarTitle=color.col) {
   require(ggplot2)
   require(data.table)
   
   if (is.null(color.col)) {
     # if no color, call basic_scatterplot instead
-    return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation,include_y_equal_x))
+    return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation,include_y_equal_x,
+                             center_title, title_size, text_size))
   }
   else{
-    data <- data.table(data)
-    x <- unname(unlist(data[,x.col,with=FALSE]))
-    y <- unname(unlist(data[,y.col,with=FALSE]))
+    text.format <- theme()
+    if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
+    if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
+    if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
+    # data <- data.table(data)
+    # x <- unname(unlist(data[,x.col,with=FALSE]))
+    # y <- unname(unlist(data[,y.col,with=FALSE]))
+    data <- data.frame(data)
+    x <- data[,x.col]
+    y <- data[,y.col]
     if (!is.null(color.col)) { color <- unname(unlist(data[,color.col,with=FALSE])) }
     if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
                                                           round(cor(x,y,use="pair"),3)) }
@@ -381,6 +398,7 @@ color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.
           + labs(x=xlab,y=ylab,title=plotTitle)
           + scale_colour_gradientn(colours = terrain.colors(5),
                                    guide=guide_colorbar(title=colorBarTitle))
+          + text.format
     )
     
     if (include_y_equal_x == TRUE) {
@@ -570,9 +588,11 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   #  - calculate projected rate: (weighted.avg + weighted.val) / (1200 + weighted.PAs)
   #  - multiply projected rate by projected PAs
   #  - age adjustment: multiply projected values by 1 + [(29 - age) * .006]
+  #     - 0.006 for age < 29, 0.003 for age > 29
   
   weighted.PAs <- 5*PA1 + 4*PA2 + 3*PA3
-  age.adjust <- (29 - marcel.df$age) * 0.006
+  age.constant <- ifelse(marcel.df$age < 29, 0.006, 0.003)
+  age.adjust <- (29 - marcel.df$age) * age.constant
   for (val in c("X1B","X2B","X3B","HR","BB","IBB","HBP","SF","SH","SO","SB","CS","R","RBI")) {
     val1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),val]),
                    prev1[paste0(marcel.df$playerID,"_",year-1),val],
@@ -608,6 +628,16 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
                                                          lw["single"]*xX1B + lw["double"]*xX2B + 
                                                          lw["triple"]*xX3B + lw["home_run"]*xHR) / xPA))
   marcel.df$playerID <- as.character(marcel.df$playerID)
+  
+  # remove rows if we couldn't calculate Marcel projections 
+  #   - (e.g., player had data for previous year but 0 PA -- see kiermke01 2014)
+  marcel.df <- subset(marcel.df, !is.nan(xwOBA))
+  
+  if (!is.null(pred_df)) {
+    # only need the projections that will be different from standard Marcel
+    keep <- c("xX1B", "xX2B", "xX3B", "xHR", "xH", "xBA", "xOBP", "xSLG", "xOPS", "xwOBA")
+    marcel.df <- marcel.df[,c("playerID","yearID","age",keep)]
+  }
   return(marcel.df)
 }
 
@@ -634,20 +664,30 @@ add_player_age <- function(df, id_col="playerID", year_col="yearID") {
 }
 
 
-get_eval_df <- function(year, lw_years=year, pred_df, prefixes=get_prefixes(pred_df,type='full')) {
+get_marcel_eval_df <- function(year, lw_years=year, pred_df=NULL, prefixes=get_prefixes(pred_df,type='full'),
+                        include_true_stats=TRUE, AB_cutoff=NULL) {
   marcel <- marcel_projections(year, lw_years=lw_years)
-  vals <- get_true_stats(year, playerIDs=marcel$playerID, lw_years=lw_years)
   
   # combine true stats and Marcel projections
-  df <- merge(x=vals, y=marcel, by=c("playerID","yearID","age"), all=TRUE)
+  if (include_true_stats == TRUE) {
+    vals <- get_true_stats(year, playerIDs=marcel$playerID, lw_years=lw_years)
+    df <- merge(x=vals, y=marcel, by=c("playerID","yearID","age"), all=TRUE)
+  }
+  else {
+    df <- marcel
+  }
   
   # now add adjusted Marcel projections
-  for (pre in prefixes) {
-    marcel.adj <- marcel_projections(year=year, pred_df=pred_df, model_prefix=pre, lw_years=lw_years)
-    df <- merge(x=df, y=marcel.adj, by=c("playerID","yearID","age"), all=TRUE)
-    colnames(df) <- gsub(".x","",colnames(df),fixed=TRUE)
-    colnames(df) <- gsub(".y",paste0("_",pre),colnames(df),fixed=TRUE)
+  if (!is.null(pred_df)) {
+    for (pre in prefixes) {
+      marcel.adj <- marcel_projections(year=year, pred_df=pred_df, model_prefix=pre, lw_years=lw_years)
+      df <- merge(x=df, y=marcel.adj, by=c("playerID","yearID","age"), all=TRUE)
+      colnames(df) <- gsub(".x","",colnames(df),fixed=TRUE)
+      colnames(df) <- gsub(".y",paste0("_",pre),colnames(df),fixed=TRUE)
+    }
   }
+  
+  if (!is.null(AB_cutoff)) { df <- subset(df, AB>=AB_cutoff) }
   
   return(df)
 }
@@ -696,7 +736,8 @@ get_true_stats <- function(year, playerIDs=NULL, lw_years=year) {
 
 
 marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS","wOBA"),
-                             model_desc=NULL, xlabs=NULL, titles=NULL) {
+                             model_desc=NULL, xlabs=NULL, titles=NULL,
+                             center_title=FALSE, title_size=NULL, text_size=NULL) {
   require(gridExtra)
   
   if (model_prefix!="") { model_prefix <- paste0("_",model_prefix) }
@@ -717,7 +758,8 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
   for (i in 1:4) {
     if (n >= i) {
       p <- basic_scatterplot(data=eval_df, x.col=stats[i], y.col=paste0("x",stats[i],model_prefix),
-                             xlab=xlabs[i], ylab=ylabs[i], plotTitle=titles[i])
+                             xlab=xlabs[i], ylab=ylabs[i], plotTitle=titles[i],
+                             center_title=center_title, title_size=title_size, text_size=text_size)
       out[[i]] <- p
     }
   }
@@ -726,4 +768,95 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
   ncol <- ifelse(n==1, 1, 2)
   do.call("grid.arrange", c(out, nrow=nrow, ncol=ncol))
 }
+
+
+add_bbref_and_lahman_ids <- function(df, mlb_id_key="mlbamid", 
+                                     crosswalk_csv="~/Documents/Projects/misc sports stuff/mlb_player_id_crosswalk.csv") {
+  require(Lahman)
+  
+  # add bbref id
+  crosswalk <- read.csv(crosswalk_csv)
+  df <- merge(x=df, y=data.frame(mlbamid=crosswalk$key_mlbam,bbref_id=crosswalk$key_bbref), 
+              by.x=mlb_id_key, by.y="mlbamid", all.x=TRUE)
+  
+  # add Lahman id
+  data("Batting")
+  # check if 2017 is in the Lahman R package yet
+  if (max(Batting$yearID)<=2017) {
+    load("./lahman.master.2017.RData")
+    Master <- lahman.master.2017
+  } else {
+    data("Master")
+  }
+  df <- merge(df, data.frame(bbref_id=Master$bbrefID,lahman_id=Master$playerID), by="bbref_id", all.x=TRUE)
+  
+  return(df)
+}
+
+
+add_steamer_to_eval_df <- function(eval_df, steamer_df) {
+  # remove steamer columns if they're already there
+  eval_df <- eval_df[,!(grepl("steamer", colnames(eval_df)))]
+  
+  # format the Steamer data frame to keep the columns we need
+  steamer_df$OPS <- steamer_df$OBP + steamer_df$SLG
+  steamer_df$BA <- steamer_df$AVG
+  steamer_df <- steamer_df[,c("lahman_id","PA","X1B","X2B","X3B","HR","BA","OBP","SLG","OPS","wOBA")]
+  colnames(steamer_df) <- paste0("x",colnames(steamer_df),"_steamer")
+  
+  df <- merge(x=eval_df, y=steamer_df, by.x="playerID", by.y="xlahman_id_steamer", all.x=TRUE)
+  return(df)
+}
+
+
+create_eval_summary <- function(eval_df, stat="wOBA") {
+  require(ModelMetrics)
+  
+  baseline <- eval_df[,stat]
+  estimates <- eval_df[,grep(paste0("x",stat),colnames(eval_df))]
+  colnames(estimates)[colnames(estimates)==paste0("x",stat)] <- paste0("x",stat,"_marcel")
+  
+  n <- dim(estimates)[2]
+  cor.vals <- rep(0, n)
+  mae.vals <- rep(0, n)
+  rmse.vals <- rep(0, n)
+  methods <- sapply(strsplit(colnames(estimates),"_"),'[',2)
+  
+  for (i in 1:n) {
+    cor.vals[i] <- cor(baseline, estimates[,i])
+    mae.vals[i] <- mae(baseline, estimates[,i])
+    rmse.vals[i] <- rmse(baseline, estimates[,i])
+  }
+  
+  summary.df <- data.frame(method=methods, cor=cor.vals, mae=mae.vals, rmse=rmse.vals)
+  return(summary.df)
+}
+
+
+scale_eval_summary <- function(summary_df, marcel_at_zero=TRUE) {
+  if (marcel_at_zero==TRUE) {
+    baseline <- subset(summary_df, method=="marcel")
+  }
+  else { baseline <- summary_df }
+  
+  summary_df$cor <- range01(summary_df$cor, zero_val=min(baseline$cor))
+  summary_df$mae <- range01(-summary_df$mae, zero_val=min(-baseline$mae))
+  summary_df$rmse <- range01(-summary_df$rmse, zero_val=min(-baseline$rmse))
+  
+  return(summary_df)
+}
+
+
+range01 <- function(x, zero_val=min(x)) { (x-zero_val)/(max(x)-zero_val) }
+
+
+reshape_eval_summary <- function(summary_df) {
+  require(data.table)
+  summary_df <- melt(summary_df, id.vars="method", measure.vals=.SD)
+  return(summary_df)
+}
+
+
+
+
 
