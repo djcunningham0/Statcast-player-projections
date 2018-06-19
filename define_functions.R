@@ -1,3 +1,97 @@
+#' 
+#' @param startYear first year to pull Statcast data
+#' @param endYear last year to pull Statcast data
+#' @param filepath directory to write RData files to; set to NULL to return list of data frames instead
+#' @param flush how many days to collect in temporary data frame before merging with alldata and flushing
+pull_pitch_data_from_statcast <- function(startYear, endYear, filepath="./data/", flush=50) {
+  require(baseballr)
+  
+  alldata <- c()  #clear alldata whenever this script is run
+  tmpdata <- c()
+  
+  count <- 0
+  
+  # loop through years, then all dates in the baseball season
+  for (year in startYear:endYear) {
+    # hard code the starting dates if you know them
+    if (year==2015) {date <- as.Date("2015-04-05")}
+    else if (year==2016) {date <- as.Date("2016-04-03")}
+    else if (year==2017) {date <- as.Date("2017-04-02")}
+    else {date <- as.Date(paste0(year,"-03-01"))}
+    if (year==2015) {endDate <- as.Date("2015-11-02")}
+    else if (year==2016) {endDate <- as.Date("2016-11-03")}
+    else if (year==2017) {endDate <- as.Date("2017-11-02")}
+    else {endDate <- as.Date(paste0(year,"-11-10"))}
+    while (date < endDate) {
+      count <- count+1
+      # attempt to scrape statcast data for each date
+      tryCatch({oneday <- scrape_statcast_savant_batter_all(start_date=as.character(date), end_date=as.character(date))
+      oneday[] <- lapply(oneday,factor)  # make all the columns factors so the dataframes can merge
+      tmpdata <- rbind(tmpdata,oneday)   # merge into tmpdata
+      print(paste0("Completed ",date))
+      },
+      warning=function(war) {print(paste0("---- Warning: ",date," ----"))},
+      error=function(err) {print(paste0("**** Error: ",date," ****"))}
+      )
+      date <- date+1
+      # periodically merge with alldata and flush tmpdata so we're not merging the huge data frame each time
+      if (count==flush) {
+        count <- 0
+        alldata <- rbind(alldata,tmpdata)
+        tmpdata <- c()
+      }
+    }
+  }
+  alldata <- rbind(alldata,tmpdata)  #merge at the end in case we haven't yet
+  print("Done downloading data.")
+  alldata$game_month <- format(as.Date(alldata$game_date,format="%Y-%m-%d"),"%m")
+  
+  # add bbref IDs for batters
+  # crosswalk file is from https://github.com/chadwickbureau/register (as of 3/23/2018)
+  crosswalk <- read.csv("./data/mlb_player_id_crosswalk.csv")
+  alldata <- merge(alldata, data.frame(batter=crosswalk$key_mlbam,bbref_id=crosswalk$key_bbref), by="batter", all.x=TRUE)
+  
+  # add Lahman database IDs for batters
+  require(Lahman)
+  data("Batting")
+  
+  # check if 2017 is in the Lahman R package yet
+  if (endYear>=2017 & max(Batting$yearID)<=2017) {
+    load("./data/lahman.master.2017.RData")
+    df <- lahman.master.2017
+  } else {
+    data("Master")
+    df <- Master
+  }
+  alldata <- merge(alldata, data.frame(bbref_id=df$bbrefID,lahman_id=df$playerID), by="bbref_id", all.x=TRUE)
+  
+  # get subset of batted balls
+  batted <- subset(alldata,description %in% c("hit_into_play","hit_into_play_no_out","hit_into_play_score","pitchout_hit_into_play_score"))
+  batted <- unique(batted)
+  
+  if (!is.null(filepath)) {
+    # write data
+    if (substr(filepath, nchar(filepath), nchar(filepath)) != "/") {filepath <- paste0(filepath,"/")}
+    print("Writing all pitches file...")
+    for (i in 1:dim(alldata)[2]) { 
+      # make sure appropriate columns are factors
+      alldata[,i] <- type.convert(as.character(alldata[,i]))
+    }
+    save(alldata, file=paste0(filepath, "all_pitches_by_batter_",startYear,"-",endYear,".RData"))
+    
+    print("Writing batted balls file...")
+    original_batted <- batted
+    for (i in 1:dim(original_batted)[2]) { 
+      # make sure appropriate columns are factors
+      original_batted[,i] <- type.convert(as.character(original_batted[,i]))
+      }
+    save(original_batted, file=paste0(filepath, "batted_balls_",startYear,"-",endYear,".RData"))
+  }
+  else { return(list(all=alldata, batted=batted)) }
+  
+}
+
+
 #'
 #' @param df data frame (should be created from CSV file)
 #' @param lw vector of linear weights
@@ -320,7 +414,8 @@ lag_yearly_data <- function(batting.dt) {
 basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                               ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
                               includeCorrelation=TRUE,include_y_equal_x=TRUE,
-                              center_title=FALSE, title_size=NULL, text_size=NULL) {
+                              center_title=FALSE, title_size=NULL, text_size=NULL,
+                              point_size=NULL, point_alpha=0.75) {
   require(ggplot2)
   require(data.table)
   
@@ -328,6 +423,9 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
   if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
   if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
   if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
+  
+  if (is.null(point_size)) { point.spec <- geom_point(alpha=point_alpha) }
+  else { point.spec <- geom_point(alpha=point_alpha, size=point_size) }
   
   # data <- data.table(data)
   # x <- unname(unlist(data[,x.col,with=FALSE]))
@@ -339,7 +437,7 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
                                                         round(cor(x,y,use="pair"),3)) }
   
   p <- (ggplot(data=data,aes(x=x,y=y,text=paste0(playerID,"_",yearID)))
-        + geom_point(alpha=.75)
+        + point.spec
         + labs(x=xlab,y=ylab,title=plotTitle)
         + text.format
   )
@@ -857,6 +955,54 @@ reshape_eval_summary <- function(summary_df) {
 }
 
 
-
+season_stats_from_statcast <- function(alldata, lw_years=unique(alldata$game_year)) {
+  # note: this doesn't include intentional walks, which throws off OBP.
+  # I couldn't find intentional walks in the statcast data
+  
+  alldata <- alldata[!is.na(alldata$events),]
+  
+  # only keep regular season games
+  alldata <- subset(alldata,game_type=="R")
+  
+  alldata$event_basic <- NA
+  alldata$event_basic[alldata$events=="single"] <- "X1B"
+  alldata$event_basic[alldata$events=="double"] <- "X2B"
+  alldata$event_basic[alldata$events=="triple"] <- "X3B"
+  alldata$event_basic[alldata$events=="home_run"] <- "HR"
+  alldata$event_basic[alldata$events=="walk"] <- "BB"
+  alldata$event_basic[alldata$events=="intent_walk"] <- "IBB"
+  alldata$event_basic[alldata$events=="hit_by_pitch"] <- "HBP"
+  alldata$event_basic[alldata$events=="sac_fly"] <- "SF"
+  alldata$event_basic[alldata$events=="sac_fly_double_play"] <- "SF"
+  alldata$event_basic[alldata$events=="sac_bunt"] <- "SH"
+  alldata$event_basic[alldata$events=="sac_bunt_double_play"] <- "SH"
+  alldata$event_basic[alldata$events=="strikeout"] <- "SO"
+  alldata$event_basic[alldata$events=="strikeout_double_play"] <- "SO"
+  other.outs <- c("double_play", "field_error", "field_out", "fielders_choice", "fielders_choice_out",
+                  "force_out", "grounded_into_double_play", "triple_play")
+  alldata$event_basic[alldata$events %in% other.outs] <- "out"
+  
+  alldata$playerID <- alldata$lahman_id
+  alldata$yearID <- alldata$game_year
+  
+  batting.dt <- dcast(alldata, batter + player_name + yearID ~ event_basic, 
+                      fun.aggregate=length, value.var="yearID")
+  
+  batting.dt$H   <- with(batting.dt, X1B+X2B+X3B+HR)
+  batting.dt$AB  <- with(batting.dt, H+out+SO)
+  batting.dt$PA  <- with(batting.dt, AB+BB+SF+SH+HBP)
+  batting.dt$BA  <- with(batting.dt, H/AB)
+  batting.dt$OBP <- with(batting.dt, (H+BB+HBP)/PA)
+  batting.dt$SLG <- with(batting.dt, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
+  batting.dt$OPS <- with(batting.dt, OBP+SLG)
+  tmp <- set_linear_weights(lw_years)
+  lw <- tmp$lw
+  lw_multiplier <- tmp$multiplier
+  batting.dt$wOBA <- with(batting.dt, (lw_multiplier * (lw["walk"]*(BB) + lw["HBP"]*HBP + 
+                                              lw["single"]*X1B + lw["double"]*X2B + 
+                                              lw["triple"]*X3B + lw["home_run"]*HR) / PA))
+  
+  return(batting.dt)
+}
 
 

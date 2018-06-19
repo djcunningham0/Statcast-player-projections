@@ -6,9 +6,10 @@ source("./define_functions.R")
 # prepare data frames -----------------------------------------------------
 print("Preparing data frames...")
 
-# batted_balls_2015-2017.csv comes from 'pull pitch data from statcast.R'
-if (!exists("original_from_csv") || !is.data.frame(get("original_from_csv"))) {
-  tryCatch(original_from_csv <- read.csv("./data/batted_balls_2015-2017.csv"),
+# batted_balls_2015-2017.RData comes from pull_pitch_data_from_statcast function
+if (!exists("original_batted") || !is.data.frame(get("original_batted"))) {
+  tryCatch(#original_batted <- read.csv("./data/batted_balls_2015-2017.csv"),
+           original_batted <- load("./data/batted_balls_2015-2017.RData"),
            error=function(err) {
              print("Missing Statcast data file.")
            })
@@ -17,7 +18,7 @@ if (!exists("original_from_csv") || !is.data.frame(get("original_from_csv"))) {
 tmp <- set_linear_weights()
 lw <- tmp$lw
 lw_multiplier <- tmp$multiplier
-batted <- format_data_frame(original_from_csv,lw)
+batted <- format_data_frame(original_batted,lw)
 
 
 # fit linear model --------------------------------------------------------
@@ -123,6 +124,21 @@ batted <- add_preds_from_probs("knn", batted, probs.knn, lw)
 
 
 print("Done fitting models.")
+
+
+# confusion matrix --------------------------------------------------------
+
+preds.multinom <- predict(mod.multinom, newdata=batted)
+preds.rf <- predict(rf.speed, newdata=batted)
+
+order <- c("out","single","double","triple","home_run")
+batted$class <- factor(batted$class, levels=order)
+preds.multinom <- factor(preds.multinom, levels=order)
+preds.rf <- factor(preds.rf, levels=order)
+
+mx.multinom <- caret::confusionMatrix(preds.multinom, batted$class)
+mx.rf <- caret::confusionMatrix(preds.rf, batted$class)
+
 
 # group linear weights by player ------------------------------------------
 

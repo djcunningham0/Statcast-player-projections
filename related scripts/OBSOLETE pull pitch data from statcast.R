@@ -1,3 +1,5 @@
+# replaced by pull_pitch_data_from_statcast function
+
 library(baseballr)
 
 startYear <- 2015
