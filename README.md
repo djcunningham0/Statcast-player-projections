@@ -1,5 +1,7 @@
 # Statcast-player-projections
 
+Main file is "Statcast modeling.R"
+
 (details coming soon)
 
 ## GLASC 2018
