@@ -25,7 +25,7 @@ for (i in 1:n) {
                             + wHR*Teams[i,"HR"] + wBB*Teams[i,"BB"] + wHBP*Teams[i,"HBP"]) / Teams[i,"PA"])
 }
 Teams$wOBA <- wOBA.vals
-Teams$playerID <- NA
+Teams$playerID <- Teams$teamID
 
 p1 <- basic_scatterplot(Teams, x.col="RperG", y.col="BA", xlab="R/G", ylab="BA",
                         plotTitle="Team Batting Average vs. Runs per Game")
