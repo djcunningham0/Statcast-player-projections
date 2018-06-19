@@ -110,7 +110,7 @@ set_linear_weights <- function(years=2017) {
   # linear weights reference: https://www.fangraphs.com/library/principles/linear-weights/
   # values from https://www.fangraphs.com/guts.aspx?type=cn
   # currently using 2017 values
-  lw.df <- read.csv("./linear weights by year.csv")
+  lw.df <- read.csv("./data/linear weights by year.csv")
   lw.df <- subset(lw.df, Season %in% years)
   
   multiplier <- mean(lw.df$wOBAScale)
@@ -250,7 +250,7 @@ add_preds_to_yearly_data <- function(weights.dt, lw.prefixes=NULL, full.prefixes
   batting.dt <- subset(batting.dt,yearID %in% minYear:maxYear)
   
   if (maxYear>=2017 & max(batting.dt$yearID)<=2017){
-    load("./lahman.batting.2017.RData")
+    load("./data/lahman.batting.2017.RData")
     batting.dt <- rbind(batting.dt,lahman.batting.2017)
   }
   
@@ -436,7 +436,7 @@ get_prefixes <- function(df, type="none") {
 #' @param batted data frame of batted balls
 add_speed_scores <- function(batted) {
   require(data.table)
-  speed_scores <- read.csv("./speed scores.csv")
+  speed_scores <- read.csv("./data/speed scores.csv")
   speed_scores <- data.table(speed_scores)
   
   # group by MLB ID and year in case there are multiple entries for a player per year (not sure if this happens)
@@ -466,7 +466,7 @@ add_positions <- function(df, id_col="playerID", year_col="yearID") {
   Fielding.subset <- data.table(subset(Fielding, yearID %in% years))
   if (max(years)>=2017 & max(Fielding$yearID)<2017) {
     # R package hasn't been updated w/ 2017 yet
-    load("./lahman.fielding.2017.RData")
+    load("./data/lahman.fielding.2017.RData")
     Fielding.subset <- rbind(Fielding.subset, lahman.fielding.2017)
   }
   
@@ -500,7 +500,7 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   batting.sub <- subset(Batting, yearID %in% past.years)
   if (max(past.years)>=2017 & max(batting.sub$yearID)<2017) {
     # R package hasn't been updated w/ 2017 yet
-    load("./lahman.batting.2017.RData")
+    load("./data/lahman.batting.2017.RData")
     batting.sub <- rbind(batting.sub, lahman.batting.2017)
   }
   batting.sub <- add_positions(batting.sub)
@@ -652,7 +652,7 @@ add_player_age <- function(df, id_col="playerID", year_col="yearID") {
   df <- data.frame(df)
   if (max(df[,year_col])>=2017 & max(Batting$yearID)<2017) {
     # R package hasn't been updated w/ 2017 yet
-    load("./lahman.master.2017.RData")
+    load("./data/lahman.master.2017.RData")
     birthdate.df <- rbind(birthdate.df, lahman.master.2017[cols])
   }
   birthdate.df <- unique(birthdate.df)
@@ -701,7 +701,7 @@ get_true_stats <- function(year, playerIDs=NULL, lw_years=year) {
   # 'vals' will be true stats for that year
   vals <- Batting
   if (year>=2017 & max(Batting$yearID<2017)) {
-    load("./lahman.batting.2017.RData")
+    load("./data/lahman.batting.2017.RData")
     vals <- rbind(Batting, lahman.batting.2017)
   }
   vals <- subset(vals, yearID==year)
@@ -771,7 +771,7 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
 
 
 add_bbref_and_lahman_ids <- function(df, mlb_id_key="mlbamid", 
-                                     crosswalk_csv="~/Documents/Projects/misc sports stuff/mlb_player_id_crosswalk.csv") {
+                                     crosswalk_csv="./data/mlb_player_id_crosswalk.csv") {
   require(Lahman)
   
   # add bbref id
@@ -783,7 +783,7 @@ add_bbref_and_lahman_ids <- function(df, mlb_id_key="mlbamid",
   data("Batting")
   # check if 2017 is in the Lahman R package yet
   if (max(Batting$yearID)<=2017) {
-    load("./lahman.master.2017.RData")
+    load("./data/lahman.master.2017.RData")
     Master <- lahman.master.2017
   } else {
     data("Master")

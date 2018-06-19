@@ -1,3 +1,5 @@
+source("./define_functions.R")
+
 library(ModelMetrics)
 
 cor.vals <- c()

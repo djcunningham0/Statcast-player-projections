@@ -5,9 +5,10 @@ source("./define_functions.R")
 
 # prepare data frames -----------------------------------------------------
 print("Preparing data frames...")
+
 # batted_balls_2015-2017.csv comes from 'pull pitch data from statcast.R'
 if (!exists("original_from_csv") || !is.data.frame(get("original_from_csv"))) {
-  tryCatch(original_from_csv <- read.csv("batted_balls_2015-2017.csv"),
+  tryCatch(original_from_csv <- read.csv("./data/batted_balls_2015-2017.csv"),
            error=function(err) {
              print("Missing Statcast data file.")
            })
@@ -68,9 +69,9 @@ print("Fitting random forest...")
 ### Need to fit new models with all of the data ###
 library(randomForest)
 
-load("./rf.RData")
-load("./rf.speed.RData")
-load("./rf.shift.RData")
+load("./data/rf.RData")
+load("./data/rf.speed.RData")
+load("./data/rf.shift.RData")
 set.seed(1)
 which.train <- sample(1:dim(batted)[1],1e5)
 train <- batted[which.train,]
@@ -102,7 +103,7 @@ library(caret)
 # currently fitting model on half the data
 # could fit on all data, but would need to re-tune k and it won't make much difference
 # knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
-load("./knnmod.RData")
+load("./data/knnmod.RData")
 probs.knn <- predict(knnmod,newdata=batted,type="prob")
 probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
 batted <- add_preds_from_probs("knn", batted, probs.knn, lw)
@@ -147,7 +148,7 @@ sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
 
 # get Marcel projections --------------------------------------------------
 
-steamer.2017 <- read.csv("../projections/Steamer projections 2017.csv")
+steamer.2017 <- read.csv("./projections/Steamer projections 2017.csv")
 steamer.2017 <- add_bbref_and_lahman_ids(steamer.2017)
 
 eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)

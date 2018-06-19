@@ -16,7 +16,7 @@ Teams$X1B <- with(Teams, H-X2B-X3B-HR)
 Teams$SLG <- with(Teams, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
 Teams$OPS <- with(Teams, OBP+SLG)
 
-lw.df <- read.csv("./linear weights by year.csv")
+lw.df <- read.csv("./data/linear weights by year.csv")
 n <- dim(Teams)[1]
 wOBA.vals <- rep(0,n)
 for (i in 1:n) {

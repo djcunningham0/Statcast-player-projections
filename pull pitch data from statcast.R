@@ -43,7 +43,7 @@ alldata$game_month <- format(as.Date(alldata$game_date,format="%Y-%m-%d"),"%m")
 
 # add bbref IDs for batters
 # crosswalk file is from https://github.com/chadwickbureau/register (as of 3/23/2018)
-crosswalk <- read.csv("~/Documents/Projects/misc sports stuff/mlb_player_id_crosswalk.csv")
+crosswalk <- read.csv("./data/mlb_player_id_crosswalk.csv")
 alldata <- merge(alldata, data.frame(batter=crosswalk$key_mlbam,bbref_id=crosswalk$key_bbref), by="batter", all.x=TRUE)
 
 # add Lahman database IDs for batters
@@ -52,7 +52,7 @@ data("Batting")
 
 # check if 2017 is in the Lahman R package yet
 if (endYear>=2017 & max(Batting$yearID)<=2017) {
-  load("./lahman.master.2017.RData")
+  load("./data/lahman.master.2017.RData")
   df <- lahman.master.2017
 } else {
   data("Master")
@@ -67,9 +67,9 @@ batted <- unique(batted)
 
 # write data
 print("Writing all pitches file...")
-write.csv(alldata,paste0("./all_pitches_by_batter_",startYear,"-",endYear,".csv"))
+write.csv(alldata,paste0("./data/all_pitches_by_batter_",startYear,"-",endYear,".csv"))
 print("Writing batted balls file...")
-write.csv(batted,paste0("./batted_balls_",startYear,"-",endYear,".csv"))
+write.csv(batted,paste0("./data/batted_balls_",startYear,"-",endYear,".csv"))
 
 
 

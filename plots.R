@@ -122,7 +122,7 @@ print(p)
 
 # single projection system plots ------------------------------------------
 
-steamer.2017 <- read.csv("../projections/Steamer projections 2017.csv")
+steamer.2017 <- read.csv("./projections/Steamer projections 2017.csv")
 steamer.2017 <- add_bbref_and_lahman_ids(steamer.2017)
 
 eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
