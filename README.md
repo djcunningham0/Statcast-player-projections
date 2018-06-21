@@ -1,4 +1,4 @@
-# Statcast-player-projections
+# Statcast Player Projections
 
 Main file is "Statcast modeling.R". It's not very organized right now but I'll be updating it and adding details here eventually.
 
