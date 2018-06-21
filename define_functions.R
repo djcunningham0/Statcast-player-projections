@@ -403,6 +403,7 @@ lag_yearly_data <- function(batting.dt) {
 #' @param data data frame with data to plot
 #' @param x.col name of column in data to use for x axis
 #' @param y.col name of column in data to use for y axis
+#' @param color.col name of column in data to use for point color
 #' @param xlab x-axis label (default: x.col)
 #' @param ylab y-axis label (default: y.col)
 #' @param plotTitle title for plot (default: ylab vs. xlab)
@@ -411,11 +412,13 @@ lag_yearly_data <- function(batting.dt) {
 #' 
 #' @return a ggplot object
 #' 
-basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
-                              ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE,include_y_equal_x=TRUE,
+create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitute(x.col),
+                              ylab=substitute(y.col), plotTitle=paste0(ylab," vs. ",xlab),
+                              includeCorrelation=TRUE, include_y_equal_x=TRUE,
                               center_title=FALSE, title_size=NULL, text_size=NULL,
-                              point_size=NULL, point_alpha=0.75) {
+                              point_size=NULL, point_alpha=0.75,
+                              text.cols=c("playerID","yearID"),
+                              colorBarTitle=color.col) {
   require(ggplot2)
   require(data.table)
   
@@ -436,10 +439,37 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
   if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
                                                         round(cor(x,y,use="pair"),3)) }
   
-  p <- (ggplot(data=data,aes(x=x,y=y,text=paste0(playerID,"_",yearID)))
+  # set point labels for using ggplotly
+  label <- NULL
+  for (col in text.cols) {
+    if (!(col %in% colnames(data))) {
+      print(paste0("Warning: ",col," not a valid column name for text.cols"))
+      label <- ""
+    }
+  }
+  if (is.null(label)) {
+    label <- data[,text.cols[1]]
+    for (i in 2:length(text.cols)) {
+      label <- paste0(label,"_",data[,text.cols[i]])
+    }
+  }
+  
+  if (is.null(color.col)) {
+    aes <- aes(x=x, y=y, text=label)
+    colorbar.format <- scale_colour_gradient()
+  }
+  else {
+    color <- data[,color.col]
+    aes <- aes(x=x, y=y, color=color, text=label)
+    colorbar.format <- scale_colour_gradientn(colours = terrain.colors(5),
+                                              guide=guide_colorbar(title=colorBarTitle))
+  }
+  
+  p <- (ggplot(data=data,aes)
         + point.spec
         + labs(x=xlab,y=ylab,title=plotTitle)
         + text.format
+        + colorbar.format
   )
   
   if (include_y_equal_x == TRUE) {
@@ -449,63 +479,6 @@ basic_scatterplot <- function(data,x.col,y.col,xlab=substitute(x.col),
   return(p)
 }
 
-#' 
-#' @param data data frame with data to plot
-#' @param x.col name of column in data to use for x axis
-#' @param y.col name of column in data to use for y axis
-#' @param color.col name of column in data to use for point color
-#' @param xlab x-axis label (default: x.col)
-#' @param ylab y-axis label (default: y.col)
-#' @param plotTitle title for plot (default: ylab vs. xlab)
-#' @param includeCorrelation if TRUE, show correlation of x,y on second line of title
-#' @param include_y_equal_x if TRUE, show y=x line
-#' @param colorBarTitle title for color bar
-#' 
-#' @return a ggplot object
-#' 
-color_scatterplot <- function(data,x.col,y.col,color.col=NULL,xlab=substitute(x.col),
-                              ylab=substitute(y.col),plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE,include_y_equal_x=TRUE,
-                              center_title=FALSE, title_size=NULL, text_size=NULL,
-                              colorBarTitle=color.col) {
-  require(ggplot2)
-  require(data.table)
-  
-  if (is.null(color.col)) {
-    # if no color, call basic_scatterplot instead
-    return(basic_scatterplot(data,x.col,y.col,xlab,ylab,plotTitle,includeCorrelation,include_y_equal_x,
-                             center_title, title_size, text_size))
-  }
-  else{
-    text.format <- theme()
-    if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
-    if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
-    if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
-    # data <- data.table(data)
-    # x <- unname(unlist(data[,x.col,with=FALSE]))
-    # y <- unname(unlist(data[,y.col,with=FALSE]))
-    data <- data.frame(data)
-    x <- data[,x.col]
-    y <- data[,y.col]
-    if (!is.null(color.col)) { color <- unname(unlist(data[,color.col,with=FALSE])) }
-    if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
-                                                          round(cor(x,y,use="pair"),3)) }
-    
-    p <- (ggplot(data=data,aes(x=x,y=y,color=color,text=paste0(playerID,"_",yearID)))
-          + geom_point(alpha=.75)
-          + labs(x=xlab,y=ylab,title=plotTitle)
-          + scale_colour_gradientn(colours = terrain.colors(5),
-                                   guide=guide_colorbar(title=colorBarTitle))
-          + text.format
-    )
-    
-    if (include_y_equal_x == TRUE) {
-      p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
-    }
-    
-    return(p)
-  }
-}
 
 #' any columns containing "_linear_weight" have linear weight predictions for that model
 #' any columns containing "_home_run" have full predictions for that model
@@ -855,7 +828,7 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
   out <- list()
   for (i in 1:4) {
     if (n >= i) {
-      p <- basic_scatterplot(data=eval_df, x.col=stats[i], y.col=paste0("x",stats[i],model_prefix),
+      p <- create_scatterplot(data=eval_df, x.col=stats[i], y.col=paste0("x",stats[i],model_prefix),
                              xlab=xlabs[i], ylab=ylabs[i], plotTitle=titles[i],
                              center_title=center_title, title_size=title_size, text_size=text_size)
       out[[i]] <- p

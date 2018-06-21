@@ -10,6 +10,7 @@ lw <- tmp$lw
 lw_multiplier <- tmp$multiplier
 batted.2018 <- format_data_frame(original_batted,lw)
 
+library(randomForest)
 probs.rf.speed <- predict(rf.speed, newdata=batted.2018, type="prob")
 batted.2018 <- add_preds_from_probs("rf.speed", batted.2018, probs.rf.speed, lw)
 
