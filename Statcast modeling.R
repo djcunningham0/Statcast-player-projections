@@ -6,10 +6,9 @@ source("./define_functions.R")
 # prepare data frames -----------------------------------------------------
 print("Preparing data frames...")
 
-# batted_balls_2015-2017.RData comes from pull_pitch_data_from_statcast function
+# batted_balls_2015-2017.RData comes from pull_statcast_data function
 if (!exists("original_batted") || !is.data.frame(get("original_batted"))) {
-  tryCatch(#original_batted <- read.csv("./data/batted_balls_2015-2017.csv"),
-           load("./data/batted_balls_2015-2017.RData"),
+  tryCatch({original_batted <- readRDS("./data/batted_balls_2015-2017.rds")},
            error=function(err) {
              print("Missing Statcast data file.")
            })
@@ -23,7 +22,7 @@ batted <- format_data_frame(original_batted,lw)
 
 # fit linear model --------------------------------------------------------
 lmod <- lm(linear_weight ~ launch_speed + launch_angle + spray_angle, data=batted)
-batted$lm_linear_weight <- predict(lmod,newdata=batted)
+batted$lm_linear_weight <- predict(lmod, newdata=batted)
 
 
 
@@ -32,13 +31,13 @@ batted$lm_linear_weight <- predict(lmod,newdata=batted)
 print("Fitting multinomial...")
 library(nnet)
 mod.multinom <- multinom(class ~ launch_speed + launch_angle + spray_angle, data=batted)
-probs.multinom <- predict(mod.multinom,newdata=batted,type="prob")
-batted <- add_preds_from_probs("multinom", batted, probs.multinom, lw)
+probs.multinom <- predict(mod.multinom, newdata=batted, type="prob")
+batted <- add_preds_from_probs(batted, "multinom", probs.multinom, lw)
 
 # this made almost no difference
 # mod.multinom.shift <- multinom(class ~ launch_speed + launch_angle + spray_angle + shift, data=batted)
 # probs <- predict(mod.multinom.shift,newdata=batted,type="prob")
-# batted <- add_preds_from_probs("multinom.shift", batted, probs, lw)
+# batted <- add_preds_from_probs(batted, "multinom.shift", probs, lw)
 
 # mod.multinom.stand <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
 # probs.stand <- predict(mod.multinom.stand,newdata=batted,type="prob")
@@ -59,7 +58,7 @@ batted <- add_preds_from_probs("multinom", batted, probs.multinom, lw)
 # library(MASS)
 # mod.lda <- lda(class ~ launch_speed + launch_angle + spray_angle, data=batted)
 # probs.lda <- predict(mod.lda,newdata=batted)$posterior
-# batted <- add_preds_from_probs("lda", batted, probs.lda, lw)
+# batted <- add_preds_from_probs(batted, "lda", probs.lda, lw)
 
 
 # fit random forest models ------------------------------------------------
@@ -70,9 +69,7 @@ print("Fitting random forest...")
 ### Need to fit new models with all of the data ###
 library(randomForest)
 
-load("./data/rf.RData")
-load("./data/rf.speed.RData")
-load("./data/rf.shift.RData")
+# here's how the models were trained:
 # set.seed(1)
 # which.train <- sample(1:dim(batted)[1],1e5)
 # train <- batted[which.train,]
@@ -80,14 +77,18 @@ load("./data/rf.shift.RData")
 # rf.speed <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd, data=train)
 # rf.shift <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + shift, data=train)
 
+rf <- readRDS("./data/rf.rds")
+rf.speed <- readRDS("./data/rf.speed.rds")
+rf.shift <- readRDS("./data/rf.shift.rds")
+
 probs.rf <- predict(rf, newdata=batted, type="prob")
-batted <- add_preds_from_probs("rf", batted, probs.rf, lw)
+batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
 
 probs.rf.speed <- predict(rf.speed, newdata=batted, type="prob")
-batted <- add_preds_from_probs("rf.speed", batted, probs.rf.speed, lw)
+batted <- add_preds_from_probs(batted, "rf.speed", probs.rf.speed, lw)
 
 probs.rf.shift <- predict(rf.shift, newdata=batted, type="prob")
-batted <- add_preds_from_probs("rf.shift", batted, probs.rf.shift, lw)
+batted <- add_preds_from_probs(batted, "rf.shift", probs.rf.shift, lw)
 
 
 # fit kNN model -----------------------------------------------------------
@@ -98,13 +99,15 @@ library(caret)
 # tune k with 'knn cross validation.R'
 # k=50 works well
 
+# here's how the model was trained:
 # currently fitting model on half the data
 # could fit on all data, but would need to re-tune k and it won't make much difference
 # knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
-# load("./data/knnmod.RData")
+
+# knnmod <- readRDS("./data/knnmod.rds")
 # probs.knn <- predict(knnmod,newdata=batted,type="prob")
 # probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
-# batted <- add_preds_from_probs("knn", batted, probs.knn, lw)
+# batted <- add_preds_from_probs(batted, "knn", probs.knn, lw)
 
 
 # fit other models --------------------------------------------------------
@@ -130,24 +133,26 @@ mx.rf <- caret::confusionMatrix(preds.rf, batted$class)
 
 # group linear weights by player ------------------------------------------
 
+# these are the defaulst in the next function (just leaving here for easy access)
 lw.prefixes <- get_prefixes(batted, type="lw")
 full.prefixes <- get_prefixes(batted, type="full")
 
-library(data.table)
-weights.dt <- group_weights_by_year(batted)
-weights_by_month.dt <- group_weights_by_year(batted, by_month=TRUE)
+weights.df <- group_weights_by_year(batted)
+weights_by_month.df <- group_weights_by_year(batted, by_month=TRUE)
 
 
 # add wOBA to Lahman database ---------------------------------------------
 
-batting.dt <- add_preds_to_yearly_data(weights.dt)#, lw.prefixes, full.prefixes)
+batting.df <- add_preds_to_yearly_data(weights.df)
 # need to do the same for monthly data if I'm going to do month-to-month correlations
 
 AB_cutoff <- 150
-sub.oneyear <- subset(batting.dt,AB>=AB_cutoff)
+sub.oneyear <- batting.df %>% 
+  filter(AB >= AB_cutoff)
 
-batting_lagged <- lag_yearly_data(batting.dt)
-sub.lag <- subset(batting_lagged,AB>=AB_cutoff & AB.prev>=AB_cutoff)
+batting_lagged <- lag_yearly_data(batting.df)
+sub.lag <- batting_lagged %>% 
+  filter(AB >= AB_cutoff & AB.prev >= AB_cutoff)
 
 
 # get Marcel projections --------------------------------------------------
@@ -158,16 +163,16 @@ print("Creating Marcel projections...")
 eval.df.2018 <- get_marcel_eval_df(2018, lw_years=2015:2017, pred_df=batting.dt, include_true_stats=FALSE)
 
 # 2017 projections (for evaluation)
-steamer.2017 <- read.csv("./projections/Steamer projections 2017.csv")
+steamer.2017 <- read_csv("./projections/Steamer projections 2017.csv", col_types=cols()) %>% 
+  rename("X1B" = "1B", "X2B" = "2B", "X3B" = "3B")
 steamer.2017 <- add_bbref_and_lahman_ids(steamer.2017)
-eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
+eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.df, AB_cutoff=AB_cutoff)
 eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
 
 marcel_eval_plot(eval.df.2017, model_desc="Marcel")
 marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF (w/o Spd)")
 marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF (speed)")
 marcel_eval_plot(eval.df.2017, model_prefix="rf.shift", model_desc="RF (shift)")
-marcel_eval_plot(eval.df.2017, model_prefix="rf.shift.2", model_desc="RF (shift 2)")
 marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
@@ -197,13 +202,6 @@ marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 summary.2017.wOBA <- create_eval_summary(eval.df.2017)
 summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 
-# library(knitr)
-# kable(summary.2017.wOBA, digits=3)
+library(knitr)
+kable(summary.2017.wOBA, digits=3)
 # kable(summary.2017.wOBA, digits=3, format="latex")
-
-
-
-
-
-
-
