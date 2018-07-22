@@ -8,3 +8,4 @@ notes and to do.R
 .DS_Store
 completed_seasons_statcast_all_pitches.rds
 current_season_statcast_all_pitches.rds
+knn.rds

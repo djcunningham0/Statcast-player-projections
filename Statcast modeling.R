@@ -30,65 +30,32 @@ batted$lm_linear_weight <- predict(lmod, newdata=batted)
 
 print("Fitting multinomial...")
 library(nnet)
-mod.multinom <- multinom(class ~ launch_speed + launch_angle + spray_angle, data=batted)
+# mod.multinom <- multinom(class ~ launch_speed + launch_angle + spray_angle, data=batted)
+# saveRDS(mod.multinom, file="./models/multinom.rds")
+mod.multinom <- readRDS("./models/multinom.rds")
 probs.multinom <- predict(mod.multinom, newdata=batted, type="prob")
 batted <- add_preds_from_probs(batted, "multinom", probs.multinom, lw)
 
-# this made almost no difference
-# mod.multinom.shift <- multinom(class ~ launch_speed + launch_angle + spray_angle + shift, data=batted)
-# probs <- predict(mod.multinom.shift,newdata=batted,type="prob")
-# batted <- add_preds_from_probs(batted, "multinom.shift", probs, lw)
-
-# mod.multinom.stand <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand, data=batted)
-# probs.stand <- predict(mod.multinom.stand,newdata=batted,type="prob")
-# batted$multinom_linear_weight_2 <- predict_lw_from_probs(probs.stand,lw)
-# 
-# mod.multinom.home <- multinom(class ~ launch_speed + launch_angle + spray_angle + home_team, data=batted)
-# probs.home <- predict(mod.multinom.home,newdata=batted,type="prob")
-# batted$multinom_linear_weight_3 <- predict_lw_from_probs(probs.home,lw)
-# 
-# mod.multinom.both <- multinom(class ~ launch_speed + launch_angle + spray_angle + stand + home_team, data=batted)
-# probs.both <- predict(mod.multinom.both,newdata=batted,type="prob")
-# batted$multinom_linear_weight_4 <- predict_lw_from_probs(probs.both,lw)
-
-
-
-# fit LDA model -----------------------------------------------------------
-
-# library(MASS)
-# mod.lda <- lda(class ~ launch_speed + launch_angle + spray_angle, data=batted)
-# probs.lda <- predict(mod.lda,newdata=batted)$posterior
-# batted <- add_preds_from_probs(batted, "lda", probs.lda, lw)
+# Note: additional features (e.g., speed scores) did not improve the multinomial model
 
 
 # fit random forest models ------------------------------------------------
 
-# might want to experiment with nodesize > 1 to make fitting faster
-
 print("Fitting random forest...")
-### Need to fit new models with all of the data ###
 library(randomForest)
 
 # here's how the models were trained:
 # set.seed(1)
 # which.train <- sample(1:dim(batted)[1],1e5)
 # train <- batted[which.train,]
-# rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle, data=train)
-# rf.speed <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd, data=train)
+# rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd, data=train)
+
+rf <- readRDS("./models/rf.rds")
+probs.rf <- predict(rf, newdata=batted, type="prob")
+batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
+
+# Note: I tried adding defensive shifts, but it didn't make much difference (actually slightly worse)
 # rf.shift <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + shift, data=train)
-
-# rf <- readRDS("./models/rf.rds")
-rf.speed <- readRDS("./models/rf.speed.rds")
-# rf.shift <- readRDS("./models/rf.shift.rds")
-
-# probs.rf <- predict(rf, newdata=batted, type="prob")
-# batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
-
-probs.rf.speed <- predict(rf.speed, newdata=batted, type="prob")
-batted <- add_preds_from_probs(batted, "rf.speed", probs.rf.speed, lw)
-
-# probs.rf.shift <- predict(rf.shift, newdata=batted, type="prob")
-# batted <- add_preds_from_probs(batted, "rf.shift", probs.rf.shift, lw)
 
 
 # fit kNN model -----------------------------------------------------------
@@ -104,7 +71,7 @@ batted <- add_preds_from_probs(batted, "rf.speed", probs.rf.speed, lw)
 # could fit on all data, but would need to re-tune k and it won't make much difference
 # knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
 
-# knnmod <- readRDS("./models/knnmod.rds")
+# knnmod <- readRDS("./models/knn.rds")
 # probs.knn <- predict(knnmod,newdata=batted,type="prob")
 # probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
 # batted <- add_preds_from_probs(batted, "knn", probs.knn, lw)
@@ -120,7 +87,7 @@ print("Done fitting models.")
 
 print("Building confusion matrix...")
 preds.multinom <- predict(mod.multinom, newdata=batted)
-preds.rf <- predict(rf.speed, newdata=batted)
+preds.rf <- predict(rf, newdata=batted)
 
 order <- c("out","single","double","triple","home_run")
 batted$class <- factor(batted$class, levels=order)
@@ -170,19 +137,17 @@ eval.df.2017 <- get_marcel_eval_df(2017, lw_years=2015:2017, pred_df=batting.df,
 eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
 
 marcel_eval_plot(eval.df.2017, model_desc="Marcel")
-# marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF (w/o Spd)")
-marcel_eval_plot(eval.df.2017, model_prefix="rf.speed", model_desc="RF (speed)")
+marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF")
 # marcel_eval_plot(eval.df.2017, model_prefix="rf.shift", model_desc="RF (shift)")
-marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
+# marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 
 # # 2016 projections
 # eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
 # marcel_eval_plot(eval.df.2016, model_desc="Marcel")
-# marcel_eval_plot(eval.df.2016, model_prefix="rf.speed", model_desc="RF")
+# marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF")
 # marcel_eval_plot(eval.df.2016, model_prefix="rf.shift", model_desc="RF (shift)")
-# marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF (w/o speed)")
 # marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 
 # 2007 projections
@@ -207,7 +172,7 @@ summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 
 # visualize correlation, MAE, and RMSE in a plot
 p <- plot_projection_summary(summary.2017.wOBA,
-                        which=c("marcel", "steamer", "multinom", "rf.speed"), 
+                        which=c("marcel", "steamer", "multinom", "rf"), 
                         names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
 
 library(knitr)
