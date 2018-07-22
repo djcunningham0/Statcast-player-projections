@@ -1,176 +1,3 @@
-#' 
-#' @param startYear first year to pull Statcast data
-#' @param endYear last year to pull Statcast data
-#' @param directory directory to write RData files to; set to NULL to return list of data frames instead
-#' @param flush how many days to collect in temporary data frame before merging with alldata and flushing
-#' @param startDate start date in "mm-dd" format
-#' @param endDate end date in "mm-dd" format
-pull_statcast_data <- function(startYear, endYear, directory="./data/", flush=50,
-                               startDate=NA, endDate=NA, showTime=FALSE) {
-  require(baseballr)
-  require(readr)
-  require(dplyr)
-  require(stringr)
-  require(lubridate)
-  
-  if (showTime) { 
-    require(tictoc)
-    tic() 
-  }
-  
-  if (!is.null(directory)) {print("!is.null")}
-  # if (directory != "") {print('!= ""')}
-  if (!is.null(directory) && (directory != "") && !file.exists(directory)) {
-    print("Specified directory does not exist.")
-    if (str_sub(directory, 1, 2) == "./") {
-      directory <- str_replace(directory, "./", paste0(getwd(),"/"))
-    }
-    print(directory)
-    return(NULL)
-  }
-  
-  alldata <- c()  #clear alldata whenever this script is run
-  tmpdata <- c()
-  
-  count <- 0
-  
-  # loop through years, then all dates in the baseball season
-  for (year in startYear:endYear) {
-    # use dates if specified
-    if (!is.na(startDate)) {date <- ymd(str_c(year, "-", startDate))}
-    # otherwise hard code the starting dates if you know them
-    else if (year==2015) {date <- ymd("2015-04-05")}
-    else if (year==2016) {date <- ymd("2016-04-03")}
-    else if (year==2017) {date <- ymd("2017-04-02")}
-    # otherwise use a date that's definitely before the regular season starts
-    else {date <- as.Date(str_c(year,"-03-30"))}
-    # same idea for end date
-    if (!is.na(endDate)) {end <- ymd(str_c(year, "-", endDate))}
-    else if (year==2015) {end <- ymd("2015-11-02")}
-    else if (year==2016) {end <- ymd("2016-11-03")}
-    else if (year==2017) {end <- ymd("2017-11-02")}
-    else {end <- ymd(str_c(year,"-11-10"))}
-    while (date <= end) {
-      count <- count + 1
-      oneday <- NULL
-      # attempt to scrape statcast data for each date
-      tryCatch(
-        {oneday <- scrape_statcast_savant_batter_all(start_date=as.character(date), 
-                                                            end_date=as.character(date)) 
-      },
-      warning=function(war) {print(str_c("---- Warning: ",date," ----"))},
-      error=function(err) {print(str_c("**** Error: ",date," ****"))}
-      )
-      if (!is.null(oneday)) {
-        # convert all to characters for now to avoid merging errors (reformat later)
-        oneday <- oneday %>% 
-          mutate_all(as.character)
-        tmpdata <- bind_rows(tmpdata, oneday)   # merge into tmpdata
-        print(str_c("Completed ",date))
-      }
-      date <- date+1
-      # periodically merge with alldata and flush tmpdata so we're not merging the huge data frame each time
-      if (count==flush) {
-        count <- 0
-        alldata <- bind_rows(alldata,tmpdata)
-        tmpdata <- c()
-      }
-    }
-  }
-  alldata <- bind_rows(alldata,tmpdata) %>%   #merge at the end in case we haven't yet
-    format_statcast_fields() %>% 
-    mutate(game_month = month(game_date))
-  print("Done downloading data.")
-  
-  alldata <- add_bbref_and_lahman_ids(alldata, mlb_id_key="batter")
-  
-  # get subset of batted balls
-  batted <- alldata %>% 
-    filter(description %in% c("hit_into_play","hit_into_play_no_out","hit_into_play_score",
-                              "pitchout_hit_into_play_score")) %>% 
-    distinct()
-  
-  if (!is.null(directory) && (directory != "")) {
-    # write data
-    # add "/" to directory if it isn't there already
-    if (str_sub(directory, -1) != "/") {directory <- str_c(directory, "/")}
-    print("Writing all pitches file...")
-    save(alldata, file=str_c(directory, "all_pitches_by_batter_",startYear,"-",endYear,".RData"))
-    
-    print("Writing batted balls file...")
-    original_batted <- batted
-    save(original_batted, file=str_c(directory, "batted_balls_",startYear,"-",endYear,".RData"))
-    
-    if (showTime) { toc() }
-  }
-  else { 
-    if (showTime) { toc() }
-    return(list(all=alldata, batted=batted)) 
-  }
-}
-
-#' 
-#' format each field correctly (some were causing problems with bind_rows)
-format_statcast_fields <- function(df) {
-  require(dplyr)
-  require(lubridate)
-  
-  df <- df %>% 
-    mutate_at("pitch_type", factor) %>% 
-    mutate_at("game_date", ymd) %>%
-    mutate_at(vars(starts_with("release_")), as.numeric) %>%
-    mutate_at("player_name", as.character) %>%
-    mutate_at("batter", as.integer) %>%
-    mutate_at("pitcher", as.integer) %>%
-    mutate_at("events", factor) %>%
-    mutate_at("description", factor) %>%
-    mutate_at("spin_dir", as.logical) %>%
-    mutate_at(vars(matches("_deprecated")), as.logical) %>%
-    mutate_at("zone", factor) %>%
-    mutate_at("des", as.character) %>%
-    mutate_at("game_type", factor) %>%
-    mutate_at("stand", factor) %>%
-    mutate_at("p_throws", factor) %>%
-    mutate_at(vars(matches("[(home)(away)]_team")), factor) %>%
-    mutate_at("type", factor) %>%
-    mutate_at("hit_location", factor) %>%
-    mutate_at("bb_type", factor) %>%
-    mutate_at("balls", as.integer) %>%
-    mutate_at("strikes", as.integer) %>%
-    mutate_at("game_year", as.integer) %>%
-    mutate_at(vars(starts_with("pfx_")), as.numeric) %>%
-    mutate_at(vars(matches("on_[123]b")), as.integer) %>%
-    mutate_at("outs_when_up", as.integer) %>%
-    mutate_at("inning", as.integer) %>%
-    mutate_at("inning_topbot", factor) %>%
-    mutate_at(vars(matches("hc_[xy]")), as.numeric) %>%
-    mutate_at(vars(matches("pos[123456789]_person_id")), as.character) %>%
-    mutate_at("umpire", as.character) %>%
-    mutate_at("sv_id", as.character) %>%
-    mutate_at(vars(starts_with("plate_")), as.numeric) %>%
-    mutate_at(vars(matches("\\bv[xyz]0$")), as.numeric) %>%
-    mutate_at(vars(matches("\\ba[xyz]$")), as.numeric) %>%
-    mutate_at(vars(matches("\\bsz_[(bot)(top)]")), as.numeric) %>%
-    mutate_at("hit_distance_sc", as.numeric) %>%
-    mutate_at("launch_speed", as.numeric) %>%
-    mutate_at("launch_angle", as.numeric) %>%
-    mutate_at("effective_speed", as.numeric) %>%
-    mutate_at("game_pk", as.numeric) %>%
-    mutate_at(vars(matches("estimated_")), as.numeric) %>%
-    mutate_at("woba_value", as.numeric) %>%
-    mutate_at("woba_denom", as.numeric) %>%
-    mutate_at("iso_value", as.integer) %>%
-    mutate_at("launch_speed_angle", factor) %>%
-    mutate_at("at_bat_number", as.integer) %>%
-    mutate_at("pitch_number", as.integer) %>%
-    mutate_at("pitch_name", factor) %>%
-    mutate_at(vars(matches("_score")), as.integer) %>%
-    mutate_at(vars(matches("_fielding_alignment")), factor) %>%
-    mutate_at("barrel", factor)
-  
-  return(df)
-}
-
 #'
 #' @param df data frame of Statcast data
 #' @param lw vector of linear weights
@@ -192,8 +19,6 @@ format_data_frame <- function(df, lw=NULL) {
             "game_month",
             "player_name",
             "batter",
-            "bbref_id",  # I added bbref_id and lahman_id in 'pull pitch data from statcast.R'
-            "lahman_id",
             "pitcher",
             "events",
             "des",
@@ -216,14 +41,17 @@ format_data_frame <- function(df, lw=NULL) {
             "launch_speed",
             "launch_angle",
             "launch_speed_angle",
-            "babip_value",  # use babip_value and iso_value to classify out, single, double, etc.
+            "babip_value",
             "iso_value",
             "if_fielding_alignment",
             "of_fielding_alignment",
             "estimated_ba_using_speedangle",
             "estimated_woba_using_speedangle")
+  
   batted <- df %>% 
     select(keep) %>% 
+    rename("key_mlbam" = "batter",
+           "Season" = "game_year") %>% 
     # only keep regular season games
     filter(game_type == "R") %>% 
     # calculate spray angle
@@ -281,7 +109,7 @@ set_linear_weights <- function(years=2017) {
   require(dplyr)
   require(baseballr)
   
-  lw.df <- fg_guts() %>% 
+  lw.df <- readRDS("./data/linear_weight_coefs.rds") %>% 
     filter(season %in% years)
   
   multiplier <- mean(lw.df$woba_scale)
@@ -383,22 +211,19 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
   }
   
   if (by_month==TRUE) {
-    grouping_cols <- c("lahman_id","batter","game_year","game_month","Spd")
+    grouping_cols <- c("key_mlbam","Season","game_month","Spd")
   } else {
-    grouping_cols <- c("lahman_id","batter","game_year","Spd")
+    grouping_cols <- c("key_mlbam","Season","Spd")
   }
   
   cols <- c(grouping_cols, "linear_weight", cols)
   weights.df <- df %>% 
     select(cols) %>% 
     group_by_at(grouping_cols) %>% 
-    summarize_all(sum) %>% 
-    ungroup() %>% 
-    rename(mlb_id = batter)
+    summarize_all(sum)
   
   return(weights.df)
 }
-
 
 #' 
 #' @param weights.df data frame of weights from group_weights_by_year
@@ -407,54 +232,17 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
 #' @return a data frame grouped by player and year with predicted linear weights and wOBA
 #' 
 add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL) {
-  require(Lahman)
-  
   if (is.null(lw.prefixes)) { lw.prefixes <- get_prefixes(weights.df, type="lw") }
   
-  minYear <- min(weights.df$game_year)
-  maxYear <- max(weights.df$game_year)
+  minYear <- min(weights.df$Season)
+  maxYear <- max(weights.df$Season)
   
-  data(Batting)
-  batting.df <- Batting %>% 
-    filter(yearID %in% minYear:maxYear)
+  batting.df <- readRDS("./data/completed_seasons_summary.rds") %>% 
+    filter(Season %in% minYear:maxYear)
   
-  if (maxYear>=2017 & max(batting.df$yearID)<=2017){
-    lahman.batting.2017 <- readRDS("./data/lahman.batting.2017.rds")
-    batting.df <- bind_rows(batting.df, lahman.batting.2017)
-  }
-  
-  # sum the relevant statistics for computing wOBA (and then some)
-  # group by playerID and yearID to account for players who changed teams
-  cols <- c("playerID", "yearID", "AB", "X1B", "X2B", "X3B", "HR", "BB", "IBB", "HBP", "SF", "SH",
-            "SB", "CS", "SO", "PA", "R", "RBI")
+  # join batting.df and weights.df
   batting.df <- batting.df %>% 
-    mutate(X1B=H-X2B-X3B-HR, PA=AB+BB+SF+SH+HBP) %>% 
-    select(cols) %>% 
-    group_by(playerID, yearID) %>% 
-    summarize_all(sum) %>% 
-    ungroup()
-    
-  
-  # description of wOBA: https://www.fangraphs.com/library/offense/woba/
-  # weights by year: https://www.fangraphs.com/guts.aspx?type=cn
-  tmp <- set_linear_weights()
-  lw <- tmp$lw
-  lw_multiplier <- tmp$multiplier
-  
-  # calculate true wOBA from Lahman
-  batting.df <- batting.df %>% 
-    mutate(wOBA = lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
-                                     lw["single"]*X1B + lw["double"]*X2B + 
-                                     lw["triple"]*X3B + lw["home_run"]*HR) / PA)
-  
-  # merge batting.df and weights.df
-  weights.df <- weights.df %>% 
-    rename(playerID = lahman_id,
-           yearID = game_year)
-  
-  batting.df <- batting.df %>% 
-    full_join(weights.df, by=c("playerID","yearID"))
-  
+    full_join(weights.df, by=c("key_mlbam", "Season"))
   
   # add predicted wOBA values from models
   # use true values for AB, BB, etc.
@@ -476,12 +264,12 @@ lag_yearly_data <- function(batting.df) {
   require(stringr)
   
   batting_lagged <- batting.df %>% 
-    mutate(next_year = yearID + 1)
+    mutate(next_year = Season + 1)
   
   cur.df <- batting_lagged %>% select(-next_year)
-  next.df <- batting_lagged %>% select(-yearID)
+  next.df <- batting_lagged %>% select(-Season)
   batting_lagged <- cur.df %>%
-    inner_join(next.df, by=c("playerID", "yearID"="next_year"))
+    inner_join(next.df, by=c("key_mlbam", "Season"="next_year"))
   colnames(batting_lagged) <- str_replace(colnames(batting_lagged), ".x", "")
   colnames(batting_lagged) <- str_replace(colnames(batting_lagged), ".y", ".prev")
   
@@ -502,14 +290,13 @@ lag_yearly_data <- function(batting.df) {
 #' @return a ggplot object
 #' 
 create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitute(x.col),
-                              ylab=substitute(y.col), plotTitle=paste0(ylab," vs. ",xlab),
-                              includeCorrelation=TRUE, include_y_equal_x=TRUE,
-                              center_title=FALSE, title_size=NULL, text_size=NULL,
-                              point_size=NULL, point_alpha=0.75,
-                              text.cols=c("playerID","yearID"),
-                              colorBarTitle=color.col) {
+                               ylab=substitute(y.col), plotTitle=paste0(ylab," vs. ",xlab),
+                               includeCorrelation=TRUE, include_y_equal_x=TRUE,
+                               center_title=FALSE, title_size=NULL, text_size=NULL,
+                               point_size=NULL, point_alpha=0.75,
+                               text.cols=c("Name","Season"),
+                               colorBarTitle=color.col) {
   require(ggplot2)
-  require(data.table)
   
   text.format <- theme()
   if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
@@ -519,10 +306,6 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
   if (is.null(point_size)) { point.spec <- geom_point(alpha=point_alpha) }
   else { point.spec <- geom_point(alpha=point_alpha, size=point_size) }
   
-  # data <- data.table(data)
-  # x <- unname(unlist(data[,x.col,with=FALSE]))
-  # y <- unname(unlist(data[,y.col,with=FALSE]))
-  # data <- data.frame(data)
   x <- data[,x.col]
   y <- data[,y.col]
   if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
@@ -615,50 +398,27 @@ add_speed_scores <- function(batted) {
     summarize(Spd = mean(Spd))
   
   batted <- batted %>% 
-    left_join(speed_scores, by=c("batter"="key_mlbam", "game_year"="Season"))
+    left_join(speed_scores, by=c("key_mlbam", "Season"))
   
   return(batted)
 }
 
-#' get a player's most common position for the years in df
+#' Generate player projections using the Marcel the Monkey framework described by Tom Tango:
+#' http://www.tangotiger.net/archives/stud0346.shtml
 #' 
-#' @param df data frame to add position to
-#' @param id_col name of column in df with Lahman ID
-#' @param year_col name of column in df with year
+#' Pass in a data frame with predictions from the Statcast models to return projections from
+#' those totals. If no data frame is passed in, regular Marcel projections are returned.
 #' 
-#' @return df with POS column for most commonly played position for each player
+#' @param year the year to create forecasts for
+#' @param pred_df data frame containing predicted 1B, 2B, 3B, HR totals (if null, use true stats)
+#' @param model_prefix the prefix of the model to be used from pred_df
+#' @param lw_years year(s) to get linear weight coefficients for (default: average of past 3 years)
+#' @param verbose if TRUE, print message if a year isn't included in pred_df
 #' 
-add_positions <- function(df, id_col="playerID", year_col="yearID") {
-  require(Lahman)
-  require(data.table)
-  df <- data.frame(df)  # in case it's a data.table object (syntax would be different)
-  years <- unique(df[,year_col])
-  data(Fielding)
-  Fielding.subset <- data.table(subset(Fielding, yearID %in% years))
-  if (max(years)>=2017 & max(Fielding$yearID)<2017) {
-    # R package hasn't been updated w/ 2017 yet
-    lahman.fielding.2017 <- readRDS("./data/lahman.fielding.2017.rds")
-    Fielding.subset <- rbind(Fielding.subset, lahman.fielding.2017)
-  }
-  
-  grouped <- Fielding.subset[,list(G=sum(G)),by=list(playerID,POS)]
-  grouped.agg <- aggregate(G ~ playerID, grouped, max)
-  grouped <- merge(grouped, grouped.agg)
-  
-  # if there's a tie, just pick the first line
-  grouped <- grouped[!duplicated(grouped$playerID)]
-  
-  # left join df with grouped fielding table
-  df <- merge(x=df, y=grouped[,c("playerID","POS")], by.x=id_col, by.y="playerID", all.x=TRUE)
-  return(df)
-}
-
-
-marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=year,
-                               pred_df_year_col="yearID", pred_df_id_col="playerID",
+#' @return a data frame with Marcel projections for all players from one method
+marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=(year-3):(year-1), 
                                verbose=FALSE) {
-  require(Lahman)
-  require(data.table)
+  require(dplyr)
   
   if (!is.null(pred_df) & is.null(model_prefix)) {
     print("Must specify which model's predictions to use in 'model' parameter.")
@@ -666,91 +426,99 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   }
   
   # get league average data by year for past three years
-  past.years <- c(year-3,year-2,year-1)
-  data(Batting)
-  batting.sub <- subset(Batting, yearID %in% past.years)
-  if (max(past.years)>=2017 & max(batting.sub$yearID)<2017) {
-    # R package hasn't been updated w/ 2017 yet
-    lahman.batting.2017 <- readRDS("./data/lahman.batting.2017.rds")
-    batting.sub <- rbind(batting.sub, lahman.batting.2017)
-  }
-  batting.sub <- add_positions(batting.sub)
-  batting.sub <- subset(batting.sub, POS!="P")  # exclude pitchers from league average hitting stats
-  batting.sub <- data.table(batting.sub)
-  batting.sub <- batting.sub[,list(AB=sum(AB),H=sum(H),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
-                                   BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
-                                   CS=sum(CS),SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP),R=sum(R),RBI=sum(RBI))
-                             ,by=list(playerID,yearID)]  # combined stats for players who changed teams
+  past.years <- c(year-3, year-2, year-1)
+  batting.sub <- readRDS("./data/completed_seasons_summary.rds") %>%  # this file is updated in update_data_files.R
+    filter(Season %in% past.years,
+           # exclude pitchers from league average hitting stats
+           position != "P")
   
   ### decision point: should league averages be computed from actual stats, or expected  ###
   ###                 stats from models? currently using actual stats                    ###
-  sdcols <- colnames(batting.sub)[!(colnames(batting.sub) %in% c("playerID","yearID"))]
-  league.avg <- batting.sub[,lapply(.SD,sum), by=list(yearID), .SDcols=sdcols]
-  league.avg <- data.frame(setorder(league.avg, -yearID))  # year-1, then year-2, then year-3
+  cols <- c("AB", "PA", "H", "X1B", "X2B", "X3B", "HR", "R", "RBI", "BB", "IBB", "SO",
+            "HBP", "SF", "SH", "SB", "CS")
+  league.total <- batting.sub %>% 
+    group_by(Season) %>% 
+    summarize_at(cols, sum) %>% 
+    ungroup() %>% 
+    arrange(desc(Season))  # year-1, then year-2, then year-3
   
-  # for easy lookup:
-  batting.sub <- data.frame(batting.sub)
-  rownames(batting.sub) <- with(batting.sub, paste0(playerID,"_",yearID))
+  # for easy lookup later on:
+  rownames(batting.sub) <- with(batting.sub, paste0("_",key_mlbam,"_",Season))
   
   # create projections for all players (non-pitchers) with batting data in previous season
-  marcel.df <- data.frame(yearID=year, playerID=subset(batting.sub, yearID==year-1)$playerID)
-  marcel.df <- add_player_age(marcel.df)
+  marcel.df <- batting.sub %>% 
+    filter(Season == year-1) %>% 
+    select(Season, Name, key_mlbam, Age) %>% 
+    # now add 1 since we're projecting for next year
+    mutate(Season = Season + 1,
+           Age = Age + 1)
   
   if (is.null(pred_df)) {
-    # only use Lahman data
-    prev1 <- subset(batting.sub, yearID==year-1)
-    prev2 <- subset(batting.sub, yearID==year-2)
-    prev3 <- subset(batting.sub, yearID==year-3)
-  }
-  else {
-    pred_df <- data.frame(pred_df)
-    colnames(pred_df)[colnames(pred_df)==pred_df_year_col] <- "yearID"
-    colnames(pred_df)[colnames(pred_df)==pred_df_id_col] <- "playerID"
-    
+    # only use true stats
+    # need to do this with subset instead of dplyr to keep row names
+    prev1 <- subset(batting.sub, Season == year-1)
+    prev2 <- subset(batting.sub, Season == year-2)
+    prev3 <- subset(batting.sub, Season == year-3)
+  } else {
     # remove pitchers
-    pred_df <- add_positions(pred_df)
-    pred_df <- subset(pred_df, POS!="P")
+    pred_df <- pred_df %>% 
+      filter(position != "P")
     
     # do some formatting so we have the same columns as batting.sub for later operations
-    cols <- c("playerID","yearID",paste0(model_prefix,"_",c("single","double","triple","home_run")),
-              "PA","BB","IBB","HBP","SF","SH","SO","SB","CS","R","RBI")
-    pred_df <- pred_df[,cols]
-    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_single")] <- "X1B"
-    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_double")] <- "X2B"
-    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_triple")] <- "X3B"
-    colnames(pred_df)[colnames(pred_df)==paste0(model_prefix,"_home_run")] <- "HR"
-    rownames(pred_df) <- with(pred_df, paste0(playerID,"_",yearID))
+    pred.cols <- c("Name", "key_mlbam", "position", "Team", "Season", "Age",
+                   paste0(model_prefix,"_",c("single","double","triple","home_run")),
+                   # use all the true values except the model is predicting
+                   cols[!(cols %in% c("X1B", "X2B", "X3B", "HR"))])
+    pred_df <- pred_df %>% 
+      select(pred.cols)
+    
+    colnames(pred_df)[colnames(pred_df) == paste0(model_prefix,"_single")] <- "X1B"
+    colnames(pred_df)[colnames(pred_df) == paste0(model_prefix,"_double")] <- "X2B"
+    colnames(pred_df)[colnames(pred_df) == paste0(model_prefix,"_triple")] <- "X3B"
+    colnames(pred_df)[colnames(pred_df) == paste0(model_prefix,"_home_run")] <- "HR"
+    rownames(pred_df) <- with(pred_df, paste0("_",key_mlbam,"_",Season))
     
     # (tried doing this with ifelse and it didn't work)
-    pred.years <- unique(pred_df$yearID)
-    if ((year-1) %in% pred.years) { prev1 <- subset(pred_df, yearID==year-1) }
-    else { prev1 <- subset(batting.sub, yearID==year-1) }
-    if ((year-2) %in% pred.years) { prev2 <- subset(pred_df, yearID==year-2) }
-    else { prev2 <- subset(batting.sub, yearID==year-2) }
-    if ((year-3) %in% pred.years) { prev3 <- subset(pred_df, yearID==year-3) }
-    else { prev3 <- subset(batting.sub, yearID==year-3) }
+    pred.years <- unique(pred_df$Season)
+    if ((year-1) %in% pred.years) { 
+      prev1 <- subset(pred_df, Season == year-1)
+    } else { 
+      prev1 <- subset(batting.sub, Season == year-1)
+    }
+    if ((year-2) %in% pred.years) { 
+      prev2 <- subset(pred_df, Season == year-2)
+    } else { 
+      prev2 <- subset(batting.sub, Season == year-2)
+    }
+    if ((year-3) %in% pred.years) { 
+      prev3 <- subset(pred_df, Season == year-3)
+    } else { 
+      prev3 <- subset(batting.sub, Season == year-3)
+    }
     
     if (verbose==TRUE){
       for (i in 1:3) {
-        if (!((year-i) %in% pred.years)) { print(paste0(year-i," from Lahman")) }
+        if (!((year-i) %in% pred.years)) { 
+          print(paste0(year-i," from observed stats")) 
+        }
       }
     }
   }
   
   # Expected PA: (.5*prev1) + (.1*prev2) + 200
   # If data is missing (player didn't play that year), count as 0
-  PA1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),"PA"]),
-                prev1[paste0(marcel.df$playerID,"_",year-1),"PA"],
+  PA1 <- ifelse(!is.na(prev1[paste0("_",marcel.df$key_mlbam,"_",year-1), "PA"]),
+                prev1[paste0("_",marcel.df$key_mlbam,"_",year-1), "PA"],
                 0)
-  PA2 <- ifelse(!is.na(prev2[paste0(marcel.df$playerID,"_",year-2),"PA"]),
-                prev2[paste0(marcel.df$playerID,"_",year-2),"PA"],
+  PA2 <- ifelse(!is.na(prev2[paste0("_",marcel.df$key_mlbam,"_",year-2), "PA"]),
+                prev2[paste0("_",marcel.df$key_mlbam,"_",year-2), "PA"],
                 0)
-  PA3 <- ifelse(!is.na(prev3[paste0(marcel.df$playerID,"_",year-3),"PA"]),
-                prev3[paste0(marcel.df$playerID,"_",year-3),"PA"],
+  PA3 <- ifelse(!is.na(prev3[paste0("_",marcel.df$key_mlbam,"_",year-3), "PA"]),
+                prev3[paste0("_",marcel.df$key_mlbam,"_",year-3), "PA"],
                 0)
   marcel.df$xPA <- 0.5*PA1 + 0.1*PA2 + 200
   
-  # Expected values for other stats:
+  # Expected values for stats except PAs:
   #  - weight value from previous 3 seasons as 5/4/3 (:= weighted.val)
   #  - weight PAs from previous 3 seasons as 5/4/3 (:= weighted.PAs)
   #  - prorate league average stats to player's number of PAs, then weight as 5/4/3
@@ -762,26 +530,26 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   #     - 0.006 for age < 29, 0.003 for age > 29
   
   weighted.PAs <- 5*PA1 + 4*PA2 + 3*PA3
-  age.constant <- ifelse(marcel.df$age < 29, 0.006, 0.003)
-  age.adjust <- (29 - marcel.df$age) * age.constant
-  for (val in c("X1B","X2B","X3B","HR","BB","IBB","HBP","SF","SH","SO","SB","CS","R","RBI")) {
-    val1 <- ifelse(!is.na(prev1[paste0(marcel.df$playerID,"_",year-1),val]),
-                   prev1[paste0(marcel.df$playerID,"_",year-1),val],
+  age.constant <- ifelse(marcel.df$Age < 29, 0.006, 0.003)
+  age.adjust <- (29 - marcel.df$Age) * age.constant
+  for (val in cols[cols != "PA"]) {
+    val1 <- ifelse(!is.na(prev1[paste0("_",marcel.df$key_mlbam,"_",year-1), val]),
+                   prev1[paste0("_",marcel.df$key_mlbam,"_",year-1), val],
                    0)
-    val2 <- ifelse(!is.na(prev2[paste0(marcel.df$playerID,"_",year-2),val]),
-                   prev2[paste0(marcel.df$playerID,"_",year-2),val],
+    val2 <- ifelse(!is.na(prev2[paste0("_",marcel.df$key_mlbam,"_",year-2), val]),
+                   prev2[paste0("_",marcel.df$key_mlbam,"_",year-2), val],
                    0)
-    val3 <- ifelse(!is.na(prev3[paste0(marcel.df$playerID,"_",year-3),val]),
-                   prev3[paste0(marcel.df$playerID,"_",year-3),val],
+    val3 <- ifelse(!is.na(prev3[paste0("_",marcel.df$key_mlbam,"_",year-3), val]),
+                   prev3[paste0("_",marcel.df$key_mlbam,"_",year-3), val],
                    0)
     weighted.val <- 5*val1 + 4*val2 + 3*val3
-    weighted.avg <- (5*PA1*league.avg[1,val]/league.avg[1,"PA"] 
-                     + 4*PA2*league.avg[2,val]/league.avg[2,"PA"]
-                     + 3*PA3*league.avg[3,val]/league.avg[3,"PA"])
-    weighted.avg <- weighted.avg/weighted.PAs * 1200
+    weighted.avg <- (5*PA1*league.total[1,val] / league.total[1,"PA"] 
+                   + 4*PA2*league.total[2,val] / league.total[2,"PA"]
+                   + 3*PA3*league.total[3,val] / league.total[3,"PA"])
+    weighted.avg <- as.numeric(weighted.avg / weighted.PAs * 1200)
     rate <- (weighted.avg + weighted.val) / (1200 + weighted.PAs)
     
-    marcel.df[,paste0("x",val)] <- rate * marcel.df$xPA * (1 + age.adjust)
+    marcel.df[, paste0("x",val)] <- rate * marcel.df$xPA * (1 + age.adjust)
   }
   
   # compute additional projected stats
@@ -798,53 +566,42 @@ marcel_projections <- function(year, pred_df=NULL, model_prefix=NULL, lw_years=y
   marcel.df$xwOBA <- with(marcel.df, (lw_multiplier * (lw["walk"]*(xBB-xIBB) + lw["HBP"]*xHBP + 
                                                          lw["single"]*xX1B + lw["double"]*xX2B + 
                                                          lw["triple"]*xX3B + lw["home_run"]*xHR) / xPA))
-  marcel.df$playerID <- as.character(marcel.df$playerID)
   
   # remove rows if we couldn't calculate Marcel projections 
   #   - (e.g., player had data for previous year but 0 PA -- see kiermke01 2014)
-  marcel.df <- subset(marcel.df, !is.nan(xwOBA))
+  marcel.df <- marcel.df %>% 
+    filter(!is.nan(xwOBA))
   
   if (!is.null(pred_df)) {
     # only need the projections that will be different from standard Marcel
     keep <- c("xX1B", "xX2B", "xX3B", "xHR", "xH", "xBA", "xOBP", "xSLG", "xOPS", "xwOBA")
-    marcel.df <- marcel.df[,c("playerID","yearID","age",keep)]
+    marcel.df <- marcel.df[,c("Name", "key_mlbam","Season","Age",keep)]
   }
   return(marcel.df)
 }
 
-
-add_player_age <- function(df, id_col="playerID", year_col="yearID") {
-  require(Lahman)
-  data(Batting)
-  data(Master)
-  
-  cols <- c("playerID","birthYear","birthMonth","birthDay")
-  birthdate.df <- Master[cols]
-  df <- data.frame(df)
-  if (max(df[,year_col])>=2017 & max(Batting$yearID)<2017) {
-    # R package hasn't been updated w/ 2017 yet
-    lahman.master.2017 <- readRDS("./data/lahman.master.2017.rds")
-    birthdate.df <- rbind(birthdate.df, lahman.master.2017[cols])
-  }
-  birthdate.df <- unique(birthdate.df)
-  
-  tmp <- merge(df[,c(id_col,year_col)], birthdate.df, by.x=id_col, by.y="playerID", all.x=TRUE)
-  tmp$age <- ifelse(tmp$birthMonth<7, tmp[,year_col]-tmp$birthYear, tmp[,year_col]-tmp$birthYear-1)
-  
-  return(merge(df, tmp[c(id_col,year_col,"age")], by=c(id_col,year_col), all.x=TRUE))
-}
-
-
-get_marcel_eval_df <- function(year, lw_years=year, pred_df=NULL, prefixes=get_prefixes(pred_df,type='full'),
-                        include_true_stats=TRUE, AB_cutoff=NULL) {
+#' Create a data frame containing Marcel projections from multiple Statcast models. One row
+#' per player with columns for projected stats from standard Marcel and Statcast model Marcel.
+#' Optionally include true stats in the data frame.
+#' 
+#' @param year the year to create forecasts for
+#' @param pred_df data frame containing predicted 1B, 2B, 3B, HR totals (if null, use true stats)
+#' @param prefixes vector of prefixes of models from pred_df to use for Marcel projections
+#' @param lw_years year(s) to get linear weight coefficients for (default: average of past 3 years)
+#' @param include_true_stats if TRUE, include players' true stats in the returned data frame
+#' @param AB_cutoff include players with at least this many ABs (only relevant if include_true_stats is TRUE)
+#' 
+#' @return a data frame with one row per each player and columns for each Marcel projection
+get_marcel_eval_df <- function(year, pred_df=NULL, prefixes=get_prefixes(pred_df,type='full'),
+                               lw_years=(year-3):(year-1), include_true_stats=TRUE, AB_cutoff=0) {
   marcel <- marcel_projections(year, lw_years=lw_years)
   
   # combine true stats and Marcel projections
-  if (include_true_stats == TRUE) {
-    vals <- get_true_stats(year, playerIDs=marcel$playerID, lw_years=lw_years)
-    df <- merge(x=vals, y=marcel, by=c("playerID","yearID","age"), all=TRUE)
-  }
-  else {
+  if (include_true_stats) {
+    df <- readRDS("./data/completed_seasons_summary.rds") %>% 
+      right_join(marcel, by=c("Name", "key_mlbam", "Season", "Age")) %>% 
+      select(-key_fangraphs)
+  } else {
     df <- marcel
   }
   
@@ -852,60 +609,51 @@ get_marcel_eval_df <- function(year, lw_years=year, pred_df=NULL, prefixes=get_p
   if (!is.null(pred_df)) {
     for (pre in prefixes) {
       marcel.adj <- marcel_projections(year=year, pred_df=pred_df, model_prefix=pre, lw_years=lw_years)
-      df <- merge(x=df, y=marcel.adj, by=c("playerID","yearID","age"), all=TRUE)
-      colnames(df) <- gsub(".x","",colnames(df),fixed=TRUE)
-      colnames(df) <- gsub(".y",paste0("_",pre),colnames(df),fixed=TRUE)
+      df <- df %>% 
+        left_join(marcel.adj, by=c("Name", "key_mlbam", "Season", "Age"))
+      colnames(df) <- gsub(".x","",colnames(df), fixed=TRUE)
+      colnames(df) <- gsub(".y",paste0("_",pre),colnames(df), fixed=TRUE)
     }
   }
   
-  if (!is.null(AB_cutoff)) { df <- subset(df, AB>=AB_cutoff) }
+  if ((AB_cutoff > 0) & include_true_stats) {
+    df <- df %>% 
+      filter(AB >= AB_cutoff)
+  }
   
   return(df)
 }
 
-
-get_true_stats <- function(year, playerIDs=NULL, lw_years=year) {
-  require(Lahman)
-  require(data.table)
-  data(Batting)
-  
+#' Get the true stats for all players in a given year (regular season must be completed)
+#' 
+#' completed_seasons.rds is updated by functions in update_data_files.R
+#' 
+#' @param year completed season to get stats from
+#' @param playerIDs vector of mldam IDs to include
+get_true_stats <- function(year, playerIDs=NULL) {
   # 'vals' will be true stats for that year
-  vals <- Batting
-  if (year>=2017 & max(Batting$yearID<2017)) {
-    lahman.batting.2017 <- readRDS("./data/lahman.batting.2017.rds")
-    vals <- rbind(Batting, lahman.batting.2017)
+  vals <- readRDS("./data/completed_seasons_summary.rds") %>% 
+    filter(Season == year)
+  
+  if (!is.null(playerIDs)) { 
+    vals <- vals %>% 
+      filter(key_mlbam %in% playerIDs)
   }
-  vals <- subset(vals, yearID==year)
-  if (!is.null(playerIDs)) { vals <- subset(vals, playerID %in% playerIDs) }
   
-  # group by playerID to get totals for players who were on multiple teams
-  vals <- data.table(vals)
-  vals <- vals[,list(AB=sum(AB),X1B=sum(H-X2B-X3B-HR),X2B=sum(X2B),X3B=sum(X3B),HR=sum(HR),
-                     BB=sum(BB),IBB=sum(IBB),HBP=sum(HBP),SF=sum(SF),SH=sum(SH),SB=sum(SB),
-                     CS=sum(CS),SO=sum(SO),PA=sum(AB+BB+SF+SH+HBP),R=sum(R),RBI=sum(RBI))
-               ,by=list(playerID,yearID)]
-  
-  vals <- add_player_age(vals)
-  
-  vals$PA  <- with(vals, AB+BB+SF+SH+HBP)
-  vals$H   <- with(vals, X1B+X2B+X3B+HR)
-  vals$BA  <- with(vals, H/AB)
-  vals$OBP <- with(vals, (H+BB+HBP)/PA)
-  vals$SLG <- with(vals, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
-  vals$OPS <- with(vals, OBP+SLG)
-  tmp <- set_linear_weights(lw_years)
-  lw <- tmp$lw
-  lw_multiplier <- tmp$multiplier
-  vals$wOBA <- with(vals, (lw_multiplier * (lw["walk"]*(BB-IBB) + lw["HBP"]*HBP + 
-                                              lw["single"]*X1B + lw["double"]*X2B + 
-                                              lw["triple"]*X3B + lw["home_run"]*HR) / PA))
-  
-  vals <- vals[c("playerID","yearID","age","PA","X1B","X2B","X3B","HR","BB","IBB","HBP",
-                 "SF","SH","AB","H","BA","OBP","SLG","OPS","wOBA")]
   return(vals)
 }
 
-
+#' Create multiple scatterplots of Marcel projected stats with their true values
+#' 
+#' @param eval_df data frame from get_marcel_eval_df
+#' @param model_prefix prefix of the model to use from eval_df ("" for standard Marcel)
+#' @param stats which stats to plot
+#' @param model_desc a description for the model (a string)
+#' @param xlabs a vector of labels to put on the x-axes
+#' @param titles a vector of titles for the plots
+#' @param center_title if TRUE, center the title
+#' @param title_size text size for the title
+#' @param text_size text size for other plot elements
 marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS","wOBA"),
                              model_desc=NULL, xlabs=NULL, titles=NULL,
                              center_title=FALSE, title_size=NULL, text_size=NULL) {
@@ -915,7 +663,7 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
   if (is.null(model_desc)) { ylabs <- paste0("x",stats,model_prefix) }
   else { ylabs <- paste0(model_desc," ",stats)}
   if (is.null(xlabs)) { xlabs <- stats }
-  if (is.null(titles)) { titles <- paste0(max(eval_df$yearID)," ",ylabs," vs. ",xlabs) }
+  if (is.null(titles)) { titles <- paste0(max(eval_df$Season)," ",ylabs," vs. ",xlabs) }
   
   n <- length(stats)
   if (n > 4) {
@@ -940,75 +688,48 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
   do.call("grid.arrange", c(out, nrow=nrow, ncol=ncol))
 }
 
-
-# TO DO: remove dependency on Lahman
-add_bbref_and_lahman_ids <- function(df, mlb_id_key="mlbamid") {
-  require(Lahman)
-  require(readr)
-  require(dplyr)
-  
-  # add bbref id
-  colnames(df)[colnames(df) == mlb_id_key] <- "key_mlbam"
-  crosswalk <- readRDS("./data/mlb_player_id_crosswalk.rds") %>% 
-    select(key_mlbam, key_bbref) %>% 
-    rename(bbref_id = key_bbref)
-  
-  df <- df %>% 
-    left_join(crosswalk, by="key_mlbam")
-  
-  # add Lahman id
-  data("Batting")
-  # check if 2017 is in the Lahman R package yet
-  if (max(Batting$yearID) <= 2017) {
-    lahman.master.2017 <- readRDS("./data/lahman.master.2017.rds")
-    Master <- lahman.master.2017
-  } else {
-    data("Master")
-  }
-  
-  join.df <- Master %>% 
-    select(bbrefID, playerID) %>% 
-    rename(bbref_id = bbrefID, lahman_id = playerID) %>% 
-    mutate_at("bbref_id", as.character) %>% 
-    mutate_at("lahman_id", as.character)
-  
-  df <- df %>% 
-    left_join(join.df, by="bbref_id")
-  
-  # rename the key_mlbam column back to its original name before returning
-  colnames(df)[colnames(df) == "key_mlbam"] <- mlb_id_key
-  return(df)
-}
-
-
+#' Add steamer projections to Marcel eval df
+#' 
+#' @param eval_df data frame from get_marcel_eval_df
+#' @param steamer_df data frame containing Steamer projections
 add_steamer_to_eval_df <- function(eval_df, steamer_df) {
   # remove steamer columns if they're already there
-  eval_df <- eval_df[,!(grepl("steamer", colnames(eval_df)))]
+  eval_df <- eval_df[, !(grepl("steamer", colnames(eval_df)))]
   
   # format the Steamer data frame to keep the columns we need
-  steamer_df$OPS <- steamer_df$OBP + steamer_df$SLG
-  steamer_df$BA <- steamer_df$AVG
-  steamer_df <- steamer_df[,c("lahman_id","PA","X1B","X2B","X3B","HR","BA","OBP","SLG","OPS","wOBA")]
+  steamer_df <- steamer_df %>% 
+    mutate(OPS = OBP + SLG) %>% 
+    rename("BA" = "AVG") %>% 
+    select(key_mlbam, PA, X1B, X2B, X3B, HR, BA, OBP, SLG, OPS, wOBA)
   colnames(steamer_df) <- paste0("x",colnames(steamer_df),"_steamer")
   
-  df <- merge(x=eval_df, y=steamer_df, by.x="playerID", by.y="xlahman_id_steamer", all.x=TRUE)
+  df <- eval_df %>% 
+    left_join(steamer_df, by=c("key_mlbam" = "xkey_mlbam_steamer"))
   return(df)
 }
 
-
+#' Compute some summary statistics for the projection methods (correlation, MAE, and RMSE).
+#' 
+#' @param eval_df data frame from get_marcel_eval_df
+#' @param stat which stat to evaluate (e.g., "wOBA", "OPS", etc.)
 create_eval_summary <- function(eval_df, stat="wOBA") {
   require(ModelMetrics)
   
+  # baseline is the vector of true values
   baseline <- eval_df[,stat]
+  
+  # estimates are the vectors of the projected values
   estimates <- eval_df[,grep(paste0("x",stat),colnames(eval_df))]
   colnames(estimates)[colnames(estimates)==paste0("x",stat)] <- paste0("x",stat,"_marcel")
   
+  # n is number of different projections we have
   n <- dim(estimates)[2]
   cor.vals <- rep(0, n)
   mae.vals <- rep(0, n)
   rmse.vals <- rep(0, n)
   methods <- sapply(strsplit(colnames(estimates),"_"),'[',2)
   
+  # get correlation, MAE, and RMSE for each projection method
   for (i in 1:n) {
     cor.vals[i] <- cor(baseline, estimates[,i])
     mae.vals[i] <- mae(baseline, estimates[,i])
@@ -1016,80 +737,107 @@ create_eval_summary <- function(eval_df, stat="wOBA") {
   }
   
   summary.df <- data.frame(method=methods, cor=cor.vals, mae=mae.vals, rmse=rmse.vals)
+  attr(summary.df, "stat") <- stat  # keep track of which stat the summary is for (used in plot subtitle later)
   return(summary.df)
 }
 
-
+#' Scale the projection evaluation data frame to more interpretable values
+#' 
+#' @param summary_df data frame from create_eval_summary
+#' @param marcel_at_zero if TRUE, scale so that all standard Marcel values are zero;
+#'                       otherwise, the minimum value will be set ot zero in each category
 scale_eval_summary <- function(summary_df, marcel_at_zero=TRUE) {
   if (marcel_at_zero==TRUE) {
     baseline <- subset(summary_df, method=="marcel")
   }
   else { baseline <- summary_df }
   
-  summary_df$cor <- range01(summary_df$cor, zero_val=min(baseline$cor))
-  summary_df$mae <- range01(-summary_df$mae, zero_val=min(-baseline$mae))
-  summary_df$rmse <- range01(-summary_df$rmse, zero_val=min(-baseline$rmse))
+  summary_df$cor <- scale_values_01(summary_df$cor, zero_val=min(baseline$cor))
+  summary_df$mae <- scale_values_01(-summary_df$mae, zero_val=min(-baseline$mae))
+  summary_df$rmse <- scale_values_01(-summary_df$rmse, zero_val=min(-baseline$rmse))
   
   return(summary_df)
 }
 
+#' Scale values so they fall between 0 and 1
+#' 
+#' @param x numeric vector
+#' @param zero_val number that should be scaled to zero (default is minimum)
+scale_values_01 <- function(x, zero_val=min(x)) { (x-zero_val)/(max(x)-zero_val) }
 
-range01 <- function(x, zero_val=min(x)) { (x-zero_val)/(max(x)-zero_val) }
-
-
+#' Convert columns of eval_summary to rows for easier plotting.
+#' 
+#' @param summary_df data frame from create_eval_summary (or scale_eval_summary)
 reshape_eval_summary <- function(summary_df) {
-  require(data.table)
-  summary_df <- melt(summary_df, id.vars="method", measure.vals=.SD)
+  require(tidyr)
+  summary_df <- gather(summary_df, metric, value, -method)
   return(summary_df)
 }
 
+#' Create a plot to visualize the performance of each projection system
+#' 
+#' @param summary_df data frame from create_eval_summary
+#' @param which vector of projection methods from summary_df to include in the plot
+#' @param names vector of names to show in the legend (must be same length and same order as which)
+#' @param scale if TRUE, 
+#' 
+#' @return a ggplot object
+plot_projection_summary <- function(summary_df, which=summary_df$method, names=NULL,
+                                    scale=TRUE, metrics=c("cor", "mae", "rmse"), 
+                                    point_size=3, center_title=TRUE,
+                                    title_size=16, text_size=12,
+                                    plot.title="Relative Accuracy of Projections",
+                                    subtitle=paste0("(", attr(summary_df, "stat"), ")")) {
+  require(dplyr)
+  require(forcats)
+  
+  # add subtitle if specified
+  if (!is.null(subtitle) && !(subtitle %in% c("", "()"))) {
+    plot.title <- paste0(plot.title, "\n", subtitle)
+  }
+  
+  if (scale) {
+    summary_df <- scale_eval_summary(summary_df)
+  }
+  
+  # only keep the methods that we want to plot
+  summary_df <- reshape_eval_summary(summary_df) %>% 
+    filter(method %in% which, metric %in% metrics) %>% 
+    mutate_at("method", factor) %>% 
+    mutate_at("metric", factor)
+  
+  summary_df$metric <- fct_recode(summary_df$metric, Correlation = "cor", MAE = "mae", RMSE = "rmse")
+  
+  # rename the factor levels if specified
+  if (!is.null(names)) {
+    if (length(which) != length(names)) {
+      print("Length of names does not match number of methods. Not attempting to rename.")
+    } else {
+      for (i in 1:length(which)) {
+        levels(summary_df$method)[levels(summary_df$method) == which[i]] <- names[i]
+      }
+    }
+  }
+  
+  p <- (ggplot(summary_df, aes(x=metric, y=value, color=method))
+        + geom_point(size=point_size)
+        + labs(x="", y="scaled value", title=plot.title)
+        + theme(legend.title=element_blank())
+        + theme(legend.key.size=unit(text_size/2,'mm'))
+        + theme(text=element_text(size=text_size))
+        + theme(plot.title=element_text(size=title_size))
+  )
+  if (center_title) {
+    p <- p + theme(plot.title=element_text(hjust=0.5))
+  }
+  return(p)
+}
 
-season_stats_from_statcast <- function(alldata, lw_years=unique(alldata$game_year)) {
-  # note: this doesn't include intentional walks, which throws off OBP.
-  # I couldn't find intentional walks in the statcast data
-  
-  alldata <- alldata[!is.na(alldata$events),]
-  
-  # only keep regular season games
-  alldata <- subset(alldata,game_type=="R")
-  
-  alldata$event_basic <- NA
-  alldata$event_basic[alldata$events=="single"] <- "X1B"
-  alldata$event_basic[alldata$events=="double"] <- "X2B"
-  alldata$event_basic[alldata$events=="triple"] <- "X3B"
-  alldata$event_basic[alldata$events=="home_run"] <- "HR"
-  alldata$event_basic[alldata$events=="walk"] <- "BB"
-  alldata$event_basic[alldata$events=="intent_walk"] <- "IBB"
-  alldata$event_basic[alldata$events=="hit_by_pitch"] <- "HBP"
-  alldata$event_basic[alldata$events=="sac_fly"] <- "SF"
-  alldata$event_basic[alldata$events=="sac_fly_double_play"] <- "SF"
-  alldata$event_basic[alldata$events=="sac_bunt"] <- "SH"
-  alldata$event_basic[alldata$events=="sac_bunt_double_play"] <- "SH"
-  alldata$event_basic[alldata$events=="strikeout"] <- "SO"
-  alldata$event_basic[alldata$events=="strikeout_double_play"] <- "SO"
-  other.outs <- c("double_play", "field_error", "field_out", "fielders_choice", "fielders_choice_out",
-                  "force_out", "grounded_into_double_play", "triple_play")
-  alldata$event_basic[alldata$events %in% other.outs] <- "out"
-  
-  alldata$playerID <- alldata$lahman_id
-  alldata$yearID <- alldata$game_year
-  
-  batting.dt <- dcast(alldata, batter + player_name + yearID ~ event_basic, 
-                      fun.aggregate=length, value.var="yearID")
-  
-  batting.dt$H   <- with(batting.dt, X1B+X2B+X3B+HR)
-  batting.dt$AB  <- with(batting.dt, H+out+SO)
-  batting.dt$PA  <- with(batting.dt, AB+BB+SF+SH+HBP)
-  batting.dt$BA  <- with(batting.dt, H/AB)
-  batting.dt$OBP <- with(batting.dt, (H+BB+HBP)/PA)
-  batting.dt$SLG <- with(batting.dt, (X1B + 2*X2B + 3*X3B + 4*HR)/AB)
-  batting.dt$OPS <- with(batting.dt, OBP+SLG)
-  tmp <- set_linear_weights(lw_years)
-  lw <- tmp$lw
-  lw_multiplier <- tmp$multiplier
-  batting.dt$wOBA <- with(batting.dt, (lw_multiplier * (lw["walk"]*(BB) + lw["HBP"]*HBP + 
-                                              lw["single"]*X1B + lw["double"]*X2B + 
-                                              lw["triple"]*X3B + lw["home_run"]*HR) / PA))
-  
-  return(batting.dt)
+#' make sure directory path ends in "/"
+format_directory_path <- function(path) {
+  require(stringr, quietly=TRUE)
+  if (str_sub(path, -1) != "/") {
+    path <- paste0(path, "/")
+  }
+  return(path)
 }

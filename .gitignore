@@ -2,16 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-all_pitches_by_batter_2015-2017.csv
-batted_balls_2015-2017.csv
-rf_models_032518.RData
-save_032518.RData
-rf_models_060318.RData
 ZiPS projections 2018.csv
 Clay Davenport 2017.csv
-knnmod.RData
-rf.RData
-rf.shift.RData
-rf.speed.RData
-all_pitches_by_batter_2015-2017.RData
 notes and to do.R
+.DS_Store

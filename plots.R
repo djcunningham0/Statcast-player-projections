@@ -154,29 +154,6 @@ eval.df.2007 <- get_marcel_eval_df(2007, AB_cutoff=100)
 marcel_eval_plot(eval.df.2007, model_desc="Marcel")
 
 
-# projection system comparison --------------------------------------------
-
-# visualize correlation, MAE, and RMSE in a plot
-scaled.2017.wOBA <- scale_eval_summary(summary.2017.wOBA)
-scaled.2017.OPS <- scale_eval_summary(summary.2017.OPS)
-
-reshaped.2017.wOBA <- reshape_eval_summary(scaled.2017.wOBA)
-reshaped.2017.OPS <- reshape_eval_summary(scaled.2017.OPS)
-
-plot.sub.wOBA <- subset(reshaped.2017.wOBA, method %in% c("marcel","steamer","multinom","rf.speed"))
-plot.sub.wOBA$method <- factor(plot.sub.wOBA$method)
-levels(plot.sub.wOBA$method) <- c("Marcel","MLR Marcel","RF Marcel","Steamer")
-levels(plot.sub.wOBA$variable) <- c("Correlation","MAE","RMSE")
-
-p <- (ggplot(data=plot.sub.wOBA, aes(x=variable, y=value, color=method))
-      + geom_point(size=5)
-      + labs(x="", y="scaled value", title="Relative Accuracy of \nProjections")
-      + theme(legend.title=element_blank())
-      + theme(legend.key.size=unit(12,'mm'))
-      + theme(text=element_text(size=24))
-      + theme(plot.title=element_text(hjust=0.5, size=36))
-      + ylim(-1,1)
-); print(p)
 
 
 # for Saberseminar abstract submission ------------------------------------
