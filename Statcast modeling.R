@@ -46,13 +46,14 @@ library(randomForest)
 
 # here's how the models were trained:
 # set.seed(1)
-# which.train <- sample(1:dim(batted)[1],1e5)
+# which.train <- sample(1:dim(batted)[1], 2e5)
 # train <- batted[which.train,]
-# rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd, data=train)
+# rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + home_team, data=train)
 
 rf <- readRDS("./models/rf.rds")
 probs.rf <- predict(rf, newdata=batted, type="prob")
 batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
+
 
 # Note: I tried adding defensive shifts, but it didn't make much difference (actually slightly worse)
 # rf.shift <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + shift, data=train)
@@ -172,8 +173,12 @@ summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 
 # visualize correlation, MAE, and RMSE in a plot
 p <- plot_projection_summary(summary.2017.wOBA,
-                        which=c("marcel", "steamer", "multinom", "rf"), 
-                        names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel", "RF update", "RF home")); print(p)
+
+p <- plot_projection_summary(summary.2017.OPS,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
 
 library(knitr)
 kable(summary.2017.wOBA, digits=3)
