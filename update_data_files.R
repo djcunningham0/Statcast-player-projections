@@ -2,7 +2,7 @@
 update_data <- function(season.year=get_current_season_year(),
                         last.season.year=get_last_completed_season_year(),
                         path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  require(readr, quietly=TRUE)
+  require(readr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   update.hist <- read_csv(paste0(path, "last_updates.csv"), col_types=cols())
@@ -60,7 +60,7 @@ days_since <- function(date) {
 #' don't necessarily need to save this locally since fg_guts() is easy, but this allows
 #' me to get linear weights w/o an internet connection
 update_linear_weights <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  require(baseballr, quietly=TRUE)
+  require(baseballr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -72,8 +72,8 @@ update_linear_weights <- function(path="/Users/Daniel/Documents/University of Ch
 
 #' update mlb_player_id_crosswalk.rds
 update_crosswalk <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  require(readr, quietly=TRUE)
-  require(dplyr, quietly=TRUE)
+  require(readr, quietly=TRUE, warn.conflicts=FALSE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -133,7 +133,7 @@ update_current_season_statcast <- function(year=get_current_season_year(),
                                            path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
                                            all.pitches.name="current_season_statcast_all_pitches.rds",
                                            batted.name="current_season_statcast_batted_balls.rds") {
-  require(dplyr, quietly=TRUE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -241,10 +241,10 @@ get_last_completed_season_year <- function(season_end="11-10") {
 #' basically a copy of baseballr::fg_bat_leaders but adds fangraphs ID only includes Spd
 scrape_fangraphs <- function(start_year=2018, end_year=start_year, agg=FALSE, which="full",
                              path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  require(xml2, quietly=TRUE)
-  require(rvest, quietly=TRUE)
-  require(dplyr, quietly=TRUE)
-  require(stringr, quietly=TRUE)
+  require(xml2, quietly=TRUE, warn.conflicts=FALSE)
+  require(rvest, quietly=TRUE, warn.conflicts=FALSE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
+  require(stringr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -311,7 +311,7 @@ scrape_fangraphs <- function(start_year=2018, end_year=start_year, agg=FALSE, wh
 
 #' make sure scraped data has correct format (convert from character to integer/numeric)
 format_scraped_fg_data <- function(df, which="full") {
-  require(dplyr, quietly=TRUE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
   if (which == "full") {
     df <- df %>% 
@@ -336,7 +336,7 @@ format_scraped_fg_data <- function(df, which="full") {
 
 #' record today's date in last_updates.csv
 register_updates <- function(which, path) {
-  require(readr, quietly=TRUE)
+  require(readr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -350,8 +350,8 @@ register_updates <- function(which, path) {
 #' @param which if specified, only reset this file's date; otherwise reset everything
 reset_last_updates_file <- function(which=NULL,
                                     path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  require(readr, quietly=TRUE)
-  require(dplyr, quietly=TRUE)
+  require(readr, quietly=TRUE, warn.conflicts=FALSE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
   path <- format_directory_path(path)
   
@@ -376,7 +376,7 @@ reset_last_updates_file <- function(which=NULL,
 
 #' make sure directory path ends in "/"
 format_directory_path <- function(path) {
-  require(stringr, quietly=TRUE)
+  require(stringr, quietly=TRUE, warn.conflicts=FALSE)
   if (str_sub(path, -1) != "/") {
     path <- paste0(path, "/")
   }
@@ -399,14 +399,14 @@ pull_statcast_data <- function(startYear, endYear=startYear,
                                pitches_file=str_c(directory, "all_pitches_by_batter_",startYear,"-",endYear,".rds"),
                                batted_file=str_c(directory, "batted_balls_",startYear,"-",endYear,".rds"),
                                flush=50, startDate=NA, endDate=NA, showTime=FALSE) {
-  require(baseballr, quietly=TRUE)
-  require(readr, quietly=TRUE)
-  require(dplyr, quietly=TRUE)
-  require(stringr, quietly=TRUE)
-  require(lubridate, quietly=TRUE)
+  require(baseballr, quietly=TRUE, warn.conflicts=FALSE)
+  require(readr, quietly=TRUE, warn.conflicts=FALSE)
+  require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
+  require(stringr, quietly=TRUE, warn.conflicts=FALSE)
+  require(lubridate, quietly=TRUE, warn.conflicts=FALSE)
   
   if (showTime) {
-    require(tictoc, quietly=TRUE)
+    require(tictoc, quietly=TRUE, warn.conflicts=FALSE)
     tic()
   }
   
@@ -547,6 +547,11 @@ format_statcast_fields <- function(df) {
     mutate_at(vars(matches("_score")), as.integer)
   
   return(df)
+}
+
+path <- "/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/"
+if (!file.exists(paste0(path, "last_updates.csv"))) {
+  reset_last_updates_file()
 }
 
 update_data()
