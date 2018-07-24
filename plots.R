@@ -24,7 +24,7 @@ p <- create_scatterplot(data=sub.oneyear,x.col="multinom_wOBA",y.col="wOBA")
 print(p)
 # ggplotly(p)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="mlb.x_wOBA",y.col="wOBA",
+p <- create_scatterplot(data=sub.oneyear,x.col="mlbx_wOBA",y.col="wOBA",
                         xlab="MLB xwOBA", plotTitle="wOBA vs. xwOBA")
 print(p)
 
@@ -40,7 +40,7 @@ print(p)
 p <- create_scatterplot(data=sub.oneyear,x.col="knn_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="mlb.x_wOBA",y.col="wOBA",color.col="Spd")
+p <- create_scatterplot(data=sub.oneyear,x.col="mlbx_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
 

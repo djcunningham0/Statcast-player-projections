@@ -84,7 +84,7 @@ format_data_frame <- function(df, lw=NULL, lw_multiplier=NULL) {
                                            class == "home_run" ~ lw["home_run"],
                                            TRUE ~ lw["out"]), 3)) %>% 
     # calculate MLB's xwOBA with this field (rename so it works with functions later)
-    mutate(mlb_x_linear_weight = estimated_woba_using_speedangle / lw_multiplier)
+    mutate(mlbx_linear_weight = estimated_woba_using_speedangle / lw_multiplier)
   
   # relevel shift so "Standard" is reference level
   batted$shift <- batted$shift %>% 
@@ -187,7 +187,7 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
     grouping_cols <- c("key_mlbam","Season","Spd")
   }
   
-  cols <- c(grouping_cols, "linear_weight", "mlb_x_linear_weight", cols)
+  cols <- c(grouping_cols, "linear_weight", "mlbx_linear_weight", cols)
   weights.df <- df %>% 
     select(cols) %>% 
     group_by_at(grouping_cols) %>% 
