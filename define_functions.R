@@ -124,17 +124,6 @@ set_linear_weights <- function(years=2015:2017) {
 }
 
 #' 
-#' @param probs an array of probabilities for out, single, double, etc.
-#' @param lw vector of linear weights
-#' 
-#' @return vector of predicted linear weights
-#' 
-predict_lw_from_probs <- function(probs, lw) {
-  classes <- c("out","single","double","triple","home_run")
-  return(as.vector(probs[,classes] %*% lw[classes]))  # w/o as.vector it returns a matrix
-}
-
-#' 
 #' @param prefix the prefix for the column names (e.g., multinom, rf, knn, etc.)
 #' @param df data frame of batted balls to add prediction columns to
 #' @param probs predicted probabilities of each class (single, double, etc.)
@@ -160,41 +149,14 @@ add_preds_from_probs <- function(df, prefix, probs, lw=NULL) {
 }
 
 #' 
-#' @param df data frame
-#' @param k value of k to use
-#' @param trainSize proportion of data to use for training the model
-#' @param seed seed to set
-#' @param type 'classification' to predict class probabilities or 'regression' to predict linear weights
+#' @param probs an array of probabilities for out, single, double, etc.
+#' @param lw vector of linear weights
 #' 
-#' @return a kNN classification model
+#' @return vector of predicted linear weights
 #' 
-fit_knn_model <- function(df, k, trainSize, seed=NULL, type="classification") {
-  require(caret)
-  
-  if (!(type %in% c("classification","regression"))) {
-    print("Must set type to 'classification' or 'regression'.")
-    return(NULL)
-  }
-  
-  if (!is.null(seed)) { set.seed(seed) }
-  n <- dim(df)[1]
-  which.train <- sample(1:n, floor(n*trainSize))
-  training <- df %>% 
-    select(which.train)
-  
-  fitCtrl <- trainControl(method = "none")
-  
-  if (type=="classification") {
-    knnmod <- train(class ~ ., data=training[c("class","launch_speed","launch_angle","spray_angle")],
-                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
-                    preProcess=c("scale","center"))
-  }
-  else {
-    knnmod <- train(linear_weight ~ ., data=training[c("linear_weight","launch_speed","launch_angle","spray_angle")],
-                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
-                    preProcess=c("scale","center"))
-  }
-  return(knnmod)
+predict_lw_from_probs <- function(probs, lw) {
+  classes <- c("out","single","double","triple","home_run")
+  return(as.vector(probs[,classes] %*% lw[classes]))  # w/o as.vector it returns a matrix
 }
 
 #' 
@@ -203,7 +165,7 @@ fit_knn_model <- function(df, k, trainSize, seed=NULL, type="classification") {
 #' @param full.prefixes vector of prefixes for models with full predictions
 #' @param by_month set to TRUE to group data by year and month
 #' 
-#' @return a data table grouped by player and year with linear weights and predicted linear weights
+#' @return a data frame grouped by player and year with linear weights and predicted linear weights
 #' 
 group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_month=FALSE) {
   require(dplyr)
@@ -234,6 +196,7 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
   return(weights.df)
 }
 
+#' Combine weights.df with true stats over the same time frame
 #' 
 #' @param weights.df data frame of weights from group_weights_by_year
 #' @param lw.prefixes vector of prefixes for models with linear weight predictions
@@ -272,6 +235,7 @@ add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL, lw=NULL,
   return(batting.df)
 }
 
+
 #' 
 #' @param batting.df data frame from add_preds_to_yearly_data
 #' 
@@ -294,80 +258,6 @@ lag_yearly_data <- function(batting.df) {
   return(batting_lagged)
 }
 
-#' 
-#' @param data data frame with data to plot
-#' @param x.col name of column in data to use for x axis
-#' @param y.col name of column in data to use for y axis
-#' @param color.col name of column in data to use for point color
-#' @param xlab x-axis label (default: x.col)
-#' @param ylab y-axis label (default: y.col)
-#' @param plotTitle title for plot (default: ylab vs. xlab)
-#' @param includeCorrelation if TRUE, show correlation of x,y on second line of title
-#' @param include_y_equal_x if TRUE, show y=x line
-#' 
-#' @return a ggplot object
-#' 
-create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitute(x.col),
-                               ylab=substitute(y.col), plotTitle=paste0(ylab," vs. ",xlab),
-                               includeCorrelation=TRUE, include_y_equal_x=TRUE,
-                               center_title=FALSE, title_size=NULL, text_size=NULL,
-                               point_size=NULL, point_alpha=0.75,
-                               text.cols=c("Name","Season"),
-                               colorBarTitle=color.col) {
-  require(ggplot2)
-  
-  text.format <- theme()
-  if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
-  if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
-  if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
-  
-  if (is.null(point_size)) { point.spec <- geom_point(alpha=point_alpha) }
-  else { point.spec <- geom_point(alpha=point_alpha, size=point_size) }
-  
-  x <- data[,x.col]
-  y <- data[,y.col]
-  if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
-                                                        round(cor(x,y,use="pair"),3)) }
-  
-  # set point labels for using ggplotly
-  label <- NULL
-  for (col in text.cols) {
-    if (!(col %in% colnames(data))) {
-      print(paste0("Warning: ",col," not a valid column name for text.cols"))
-      label <- ""
-    }
-  }
-  if (is.null(label)) {
-    label <- data[,text.cols[1]]
-    for (i in 2:length(text.cols)) {
-      label <- paste0(label,"_",data[,text.cols[i]])
-    }
-  }
-  
-  if (is.null(color.col)) {
-    aes <- aes(x=x, y=y, text=label)
-    colorbar.format <- scale_colour_gradient()
-  } else {
-    color <- data[,color.col]
-    aes <- aes(x=x, y=y, color=color, text=label)
-    colorbar.format <- scale_colour_gradientn(colours = terrain.colors(5),
-                                              guide=guide_colorbar(title=colorBarTitle))
-  }
-  
-  p <- (ggplot(data=data,aes)
-        + point.spec
-        + labs(x=xlab,y=ylab,title=plotTitle)
-        + text.format
-        + colorbar.format
-  )
-  
-  if (include_y_equal_x == TRUE) {
-    p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
-  }
-  
-  return(p)
-}
-
 
 #' any columns containing "_linear_weight" have linear weight predictions for that model
 #' any columns containing "_home_run" have full predictions for that model
@@ -377,10 +267,10 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
 #' 
 #' @return a vector of model prefixes
 #' 
-get_prefixes <- function(df, type="none") {
+get_prefixes <- function(df, type="") {
   if (type != "lw" & type != "full") {
     print("Must set type to 'lw' or 'full'.")
-    return(NA)
+    return(NULL)
   }
   
   col_names <- colnames(df)
@@ -402,6 +292,8 @@ get_prefixes <- function(df, type="none") {
 #' speed_scores.rds is updated by functions in update_data_files.R
 #' 
 #' @param batted data frame of batted balls
+#' 
+#' @return the batted data frame with FanGraphs speed scores added
 add_speed_scores <- function(batted) {
   require(readr)
   require(dplyr)
@@ -642,12 +534,14 @@ get_marcel_eval_df <- function(year, pred_df=NULL, prefixes=get_prefixes(pred_df
   return(df)
 }
 
+
 #' Get the true stats for all players in a given year (regular season must be completed)
 #' 
 #' completed_seasons.rds is updated by functions in update_data_files.R
 #' 
 #' @param year completed season to get stats from
 #' @param playerIDs vector of mldam IDs to include
+#' 
 get_true_stats <- function(year, playerIDs=NULL) {
   # 'vals' will be true stats for that year
   vals <- readRDS("./data/completed_seasons_summary.rds") %>% 
@@ -662,6 +556,7 @@ get_true_stats <- function(year, playerIDs=NULL) {
 }
 
 #' Create multiple scatterplots of Marcel projected stats with their true values
+#' (Note: does not return anything, just prints the plot)
 #' 
 #' @param eval_df data frame from get_marcel_eval_df
 #' @param model_prefix prefix of the model to use from eval_df ("" for standard Marcel)
@@ -672,6 +567,7 @@ get_true_stats <- function(year, playerIDs=NULL) {
 #' @param center_title if TRUE, center the title
 #' @param title_size text size for the title
 #' @param text_size text size for other plot elements
+#' 
 marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS","wOBA"),
                              model_desc=NULL, xlabs=NULL, titles=NULL,
                              center_title=FALSE, title_size=NULL, text_size=NULL) {
@@ -710,6 +606,9 @@ marcel_eval_plot <- function(eval_df, model_prefix="", stats=c("OBP","SLG","OPS"
 #' 
 #' @param eval_df data frame from get_marcel_eval_df
 #' @param steamer_df data frame containing Steamer projections
+#' 
+#' @return eval_df with steamer projections added
+#' 
 add_steamer_to_eval_df <- function(eval_df, steamer_df) {
   # remove steamer columns if they're already there
   eval_df <- eval_df[, !(grepl("steamer", colnames(eval_df)))]
@@ -730,6 +629,9 @@ add_steamer_to_eval_df <- function(eval_df, steamer_df) {
 #' 
 #' @param eval_df data frame from get_marcel_eval_df
 #' @param stat which stat to evaluate (e.g., "wOBA", "OPS", etc.)
+#' 
+#' @return data frame with one row per complete projection method and columns for eval metrics
+#' 
 create_eval_summary <- function(eval_df, stat="wOBA") {
   require(ModelMetrics)
   
@@ -783,13 +685,13 @@ scale_eval_summary <- function(summary_df, marcel_at_zero=TRUE) {
 #' @param zero_val number that should be scaled to zero (default is minimum)
 scale_values_01 <- function(x, zero_val=min(x)) { (x-zero_val)/(max(x)-zero_val) }
 
+
 #' Convert columns of eval_summary to rows for easier plotting.
 #' 
 #' @param summary_df data frame from create_eval_summary (or scale_eval_summary)
 reshape_eval_summary <- function(summary_df) {
   require(tidyr)
-  summary_df <- gather(summary_df, metric, value, -method)
-  return(summary_df)
+  return(gather(summary_df, metric, value, -method))
 }
 
 #' Create a plot to visualize the performance of each projection system
@@ -852,10 +754,137 @@ plot_projection_summary <- function(summary_df, which=summary_df$method, names=N
 }
 
 #' make sure directory path ends in "/"
+#' 
+#' @param path a path to a directory (string)
+#' 
+#' @return the same path ending in "/"
+#' 
 format_directory_path <- function(path) {
   require(stringr, quietly=TRUE)
   if (str_sub(path, -1) != "/") {
     path <- paste0(path, "/")
   }
   return(path)
+}
+
+#' 
+#' @param data data frame with data to plot
+#' @param x.col name of column in data to use for x axis
+#' @param y.col name of column in data to use for y axis
+#' @param color.col name of column in data to use for point color
+#' @param xlab x-axis label (default: x.col)
+#' @param ylab y-axis label (default: y.col)
+#' @param plotTitle title for plot (default: ylab vs. xlab)
+#' @param includeCorrelation if TRUE, show correlation of x, y on second line of title
+#' @param include_y_equal_x if TRUE, show y=x line
+#' @param center_title if TRUE, center the title
+#' @param title_size text size for title
+#' @param text_size text size for other plot elements
+#' @param point_size point size for scatterplot
+#' @param point_alpha transparency amount for points
+#' @param text.cols columns to concatenate for point text (useful if viewing with ggplotly)
+#' @param colorBarTitle title for colorbar
+#' 
+#' @return a ggplot object
+#' 
+create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitute(x.col),
+                               ylab=substitute(y.col), plotTitle=paste0(ylab," vs. ",xlab),
+                               includeCorrelation=TRUE, include_y_equal_x=TRUE,
+                               center_title=FALSE, title_size=NULL, text_size=NULL,
+                               point_size=NULL, point_alpha=0.75,
+                               text.cols=c("Name","Season"),
+                               colorBarTitle=color.col) {
+  require(ggplot2)
+  
+  text.format <- theme()
+  if (center_title==TRUE) { text.format <- text.format + theme(plot.title=element_text(hjust=0.5)) }
+  if (!is.null(title_size)) { text.format <- text.format + theme(plot.title=element_text(size=title_size)) }
+  if (!is.null(text_size)) { text.format <- text.format + theme(text=element_text(size=text_size)) }
+  
+  if (is.null(point_size)) { point.spec <- geom_point(alpha=point_alpha) }
+  else { point.spec <- geom_point(alpha=point_alpha, size=point_size) }
+  
+  x <- data[,x.col]
+  y <- data[,y.col]
+  if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
+                                                        round(cor(x,y,use="pair"),3)) }
+  
+  # set point labels for using ggplotly
+  label <- NULL
+  for (col in text.cols) {
+    if (!(col %in% colnames(data))) {
+      print(paste0("Warning: ",col," not a valid column name for text.cols"))
+      label <- ""
+    }
+  }
+  if (is.null(label)) {
+    label <- data[,text.cols[1]]
+    for (i in 2:length(text.cols)) {
+      label <- paste0(label,"_",data[,text.cols[i]])
+    }
+  }
+  
+  if (is.null(color.col)) {
+    aes <- aes(x=x, y=y, text=label)
+    colorbar.format <- scale_colour_gradient()
+  } else {
+    color <- data[,color.col]
+    aes <- aes(x=x, y=y, color=color, text=label)
+    colorbar.format <- scale_colour_gradientn(colours = terrain.colors(5),
+                                              guide=guide_colorbar(title=colorBarTitle))
+  }
+  
+  p <- (ggplot(data=data,aes)
+        + point.spec
+        + labs(x=xlab,y=ylab,title=plotTitle)
+        + text.format
+        + colorbar.format
+  )
+  
+  if (include_y_equal_x == TRUE) {
+    p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
+  }
+  
+  return(p)
+}
+
+
+#' Note: './knn cross validation.R' was used to test different values of k using cross
+#' validation before fitting the model with this function
+#' 
+#' @param df data frame
+#' @param k value of k to use
+#' @param trainSize proportion of data to use for training the model
+#' @param seed seed to set
+#' @param type 'classification' to predict class probabilities or 'regression' to predict linear weights
+#' 
+#' @return a kNN classification model
+#' 
+fit_knn_model <- function(df, k, trainSize, seed=NULL, type="classification") {
+  require(caret)
+  
+  if (!(type %in% c("classification","regression"))) {
+    print("Must set type to 'classification' or 'regression'.")
+    return(NULL)
+  }
+  
+  if (!is.null(seed)) { set.seed(seed) }
+  n <- dim(df)[1]
+  which.train <- sample(1:n, floor(n*trainSize))
+  training <- df %>% 
+    select(which.train)
+  
+  fitCtrl <- trainControl(method = "none")
+  
+  if (type=="classification") {
+    knnmod <- train(class ~ ., data=training[c("class","launch_speed","launch_angle","spray_angle")],
+                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
+                    preProcess=c("scale","center"))
+  }
+  else {
+    knnmod <- train(linear_weight ~ ., data=training[c("linear_weight","launch_speed","launch_angle","spray_angle")],
+                    method="knn", trControl=fitCtrl, tuneGrid=expand.grid(k=k),
+                    preProcess=c("scale","center"))
+  }
+  return(knnmod)
 }

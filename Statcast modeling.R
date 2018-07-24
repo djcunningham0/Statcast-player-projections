@@ -140,12 +140,11 @@ marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 
-# # 2016 projections
-# eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.dt, AB_cutoff=AB_cutoff)
-# marcel_eval_plot(eval.df.2016, model_desc="Marcel")
-# marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF")
-# marcel_eval_plot(eval.df.2016, model_prefix="rf.shift", model_desc="RF (shift)")
-# marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
+# 2016 projections
+eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.df, AB_cutoff=AB_cutoff)
+marcel_eval_plot(eval.df.2016, model_desc="Marcel")
+marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF")
+marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 
 # 2007 projections
 # match the analysis here:
