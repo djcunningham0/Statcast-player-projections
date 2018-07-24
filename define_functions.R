@@ -202,11 +202,12 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
 #' @param lw.prefixes vector of prefixes for models with linear weight predictions
 #' @param lw vector of linear weight values
 #' @param lw_multiplier scaling constant for wOBA
+#' @param current_season if TRUE, use current season summary file; otherwise, completed seasons file
 #' 
 #' @return a data frame grouped by player and year with predicted linear weights and wOBA
 #' 
 add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL, lw=NULL,
-                                     lw_multiplier=NULL) {
+                                     lw_multiplier=NULL, current_season=FALSE) {
   if (is.null(lw)) {
     tmp <- set_linear_weights()
     lw <- tmp$lw
@@ -215,11 +216,15 @@ add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL, lw=NULL,
   
   if (is.null(lw.prefixes)) { lw.prefixes <- get_prefixes(weights.df, type="lw") }
   
-  minYear <- min(weights.df$Season)
-  maxYear <- max(weights.df$Season)
-  
-  batting.df <- readRDS("./data/completed_seasons_summary.rds") %>% 
-    filter(Season %in% minYear:maxYear)
+  if (current_season) {
+    batting.df <- readRDS("./data/current_season_summary.rds")
+  } else {
+    minYear <- min(weights.df$Season)
+    maxYear <- max(weights.df$Season)
+    
+    batting.df <- readRDS("./data/completed_seasons_summary.rds") %>% 
+      filter(Season %in% minYear:maxYear)
+  }
   
   # join batting.df and weights.df
   batting.df <- batting.df %>% 
