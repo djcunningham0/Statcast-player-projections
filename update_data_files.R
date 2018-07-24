@@ -1,3 +1,22 @@
+#' This function updates the following raw data files:
+#'   - linear_weights.rds
+#'   - mlb_player_id_crosswalk.rds
+#'   - speed_scores.rds
+#'   - current_season_summary.rds
+#'   - current_season_statcast_all_pitches.rds
+#'   - current_season_statcast_batted_balls.rds
+#'   - completed_seasons_summary.rds
+#'   - completed_seasons_statcast_all_pitches.rds
+#'   - completed_seasons_statcast_batted_balls.rds
+#' 
+#' The dates of the latest updates are stored in last_updates.csv.
+#' 
+#' See the update_data function for the regular schedule for updates. The
+#' functions can also be run on an ad hoc basis. The reset_last_updates function
+#' can be run to force all of the files to be fully rebuilt on the next run.
+
+source("./data_update_functions.R")
+
 #' wrapper function that calls the other functions defined below
 update_data <- function(season.year=get_current_season_year(),
                         last.season.year=get_last_completed_season_year(),
@@ -206,37 +225,6 @@ rebuild_completed_seasons_statcast <- function(start_year=2015,
   register_updates("completed_seasons_statcast", path=path)
 }
 
-#' Get the year of the current MLB season
-#'
-#' if 4/8 or later, assume regular season is in progress and use this year;
-#' otherwise, use last year
-#' this is pretty conservative -- want to avoid getting errors trying to pull Statcast data before season starts
-#'
-#' @param season_start season start date in "mm-dd" format (default is 4/8)
-get_current_season_year <- function(season_start="04-08") {
-  cur.date  <- Sys.Date()
-  cur.year  <- as.numeric(format(cur.date, "%Y"))
-
-  year <- ifelse(cur.date >= as.Date(paste0(cur.year,"-",season_start)), cur.year, cur.year-1)
-
-  return(year)
-}
-
-#' Get the year of the last completed MLB season
-#'
-#' if 11/10 or later, assume regular season is in progress and use this year;
-#' otherwise, use last year
-#' this is really conservative -- want to avoid saying a season is complete if it isn't
-#'
-#' @param season_end season end date in "mm-dd" format (default is 11/10)
-get_last_completed_season_year <- function(season_end="11-10") {
-  cur.date  <- Sys.Date()
-  cur.year  <- as.numeric(format(cur.date, "%Y"))
-
-  year <- ifelse(cur.date >= as.Date(paste0(cur.year,"-",season_end)), cur.year, cur.year-1)
-
-  return(year)
-}
 
 #' basically a copy of baseballr::fg_bat_leaders but adds fangraphs ID only includes Spd
 scrape_fangraphs <- function(start_year=2018, end_year=start_year, agg=FALSE, which="full",
@@ -374,14 +362,6 @@ reset_last_updates_file <- function(which=NULL,
   write_csv(update_df, paste0(path, "last_updates.csv"))
 }
 
-#' make sure directory path ends in "/"
-format_directory_path <- function(path) {
-  require(stringr, quietly=TRUE, warn.conflicts=FALSE)
-  if (str_sub(path, -1) != "/") {
-    path <- paste0(path, "/")
-  }
-  return(path)
-}
 
 #' Pull Statcast data for a given date range. Uses baseballr::scrape_statcast_savant_batter_all
 #'
@@ -440,7 +420,7 @@ pull_statcast_data <- function(startYear, endYear=startYear,
     else if (year==2015) {end <- ymd("2015-11-02")}
     else if (year==2016) {end <- ymd("2016-11-03")}
     else if (year==2017) {end <- ymd("2017-11-02")}
-    else {end <- min(ymd(str_c(year,"-11-10")), Sys.Date())}
+    else {end <- min(ymd(str_c(year,"-11-10")), Sys.Date()-1)}  # data is updated at 3am next morning, so don't try to pull today
     while (date <= end) {
       count <- count + 1
       oneday <- NULL
@@ -554,3 +534,4 @@ if (!file.exists(paste0(path, "last_updates.csv"))) {
   reset_last_updates_file()
 }
 
+update_data()
