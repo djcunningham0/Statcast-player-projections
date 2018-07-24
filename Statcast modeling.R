@@ -14,16 +14,13 @@ if (!exists("original_batted") || !is.data.frame(get("original_batted"))) {
            })
 }
 
-tmp <- set_linear_weights()
-lw <- tmp$lw
-lw_multiplier <- tmp$multiplier
-batted <- format_data_frame(original_batted, lw)
+batted <- format_data_frame(original_batted)
 
 
-# fit linear model --------------------------------------------------------
-lmod <- lm(linear_weight ~ launch_speed + launch_angle + spray_angle, data=batted)
-batted$lm_linear_weight <- predict(lmod, newdata=batted)
-
+# fit OLS model --------------------------------------------------------
+# lmod <- lm(linear_weight ~ launch_speed + launch_angle + spray_angle, data=batted)
+# batted$lm_linear_weight <- predict(lmod, newdata=batted)
+# Note: OLS model only predicts linear weight (no class probabilities) and isn't very good (as expected)
 
 
 # fit multinomial logistic regression model ----------------------------------------
@@ -34,7 +31,7 @@ library(nnet)
 # saveRDS(mod.multinom, file="./models/multinom.rds")
 mod.multinom <- readRDS("./models/multinom.rds")
 probs.multinom <- predict(mod.multinom, newdata=batted, type="prob")
-batted <- add_preds_from_probs(batted, "multinom", probs.multinom, lw)
+batted <- add_preds_from_probs(batted, "multinom", probs.multinom)
 
 # Note: additional features (e.g., speed scores) did not improve the multinomial model
 
@@ -52,7 +49,7 @@ library(randomForest)
 
 rf <- readRDS("./models/rf.rds")
 probs.rf <- predict(rf, newdata=batted, type="prob")
-batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
+batted <- add_preds_from_probs(batted, "rf", probs.rf)
 
 
 # Note: I tried adding defensive shifts, but it didn't make much difference (actually slightly worse)
@@ -72,10 +69,10 @@ batted <- add_preds_from_probs(batted, "rf", probs.rf, lw)
 # could fit on all data, but would need to re-tune k and it won't make much difference
 # knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
 
-# knnmod <- readRDS("./models/knn.rds")
-# probs.knn <- predict(knnmod,newdata=batted,type="prob")
-# probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
-# batted <- add_preds_from_probs(batted, "knn", probs.knn, lw)
+knnmod <- readRDS("./models/knn.rds")
+probs.knn <- predict(knnmod,newdata=batted,type="prob")
+probs.knn <- as.matrix(probs.knn)  # it was returning a list, which caused problems with the next function
+batted <- add_preds_from_probs(batted, "knn", probs.knn)
 
 
 # fit other models --------------------------------------------------------
@@ -106,7 +103,7 @@ lw.prefixes <- get_prefixes(batted, type="lw")
 full.prefixes <- get_prefixes(batted, type="full")
 
 weights.df <- group_weights_by_year(batted)
-weights_by_month.df <- group_weights_by_year(batted, by_month=TRUE)
+# weights_by_month.df <- group_weights_by_year(batted, by_month=TRUE)
 
 
 # add wOBA to Lahman database ---------------------------------------------
@@ -139,8 +136,7 @@ eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
 
 marcel_eval_plot(eval.df.2017, model_desc="Marcel")
 marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF")
-# marcel_eval_plot(eval.df.2017, model_prefix="rf.shift", model_desc="RF (shift)")
-# marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
+marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 
@@ -174,7 +170,7 @@ summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 # visualize correlation, MAE, and RMSE in a plot
 p <- plot_projection_summary(summary.2017.wOBA,
                              which=c("marcel", "steamer", "multinom", "rf"), 
-                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel", "RF update", "RF home")); print(p)
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
 
 p <- plot_projection_summary(summary.2017.OPS,
                              which=c("marcel", "steamer", "multinom", "rf"), 

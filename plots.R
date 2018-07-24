@@ -16,10 +16,6 @@ p <- create_scatterplot(data=sub.oneyear,x.col="rf_wOBA",y.col="wOBA",
 print(p)
 # ggplotly(p1)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="rf.speed_wOBA",y.col="wOBA",
-                       xlab="random forest wOBA prediction (speed)",plotTitle="wOBA vs. RF prediction (speed)")
-print(p)
-
 p3 <- create_scatterplot(data=sub.oneyear,x.col="knn_wOBA",y.col="wOBA",
                         xlab="kNN wOBA prediction",plotTitle="wOBA vs. kNN prediction")
 print(p3)
@@ -28,9 +24,9 @@ p <- create_scatterplot(data=sub.oneyear,x.col="multinom_wOBA",y.col="wOBA")
 print(p)
 # ggplotly(p)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="lda_wOBA",y.col="wOBA")
+p <- create_scatterplot(data=sub.oneyear,x.col="mlb.x_wOBA",y.col="wOBA",
+                        xlab="MLB xwOBA", plotTitle="wOBA vs. xwOBA")
 print(p)
-
 
 # next three plots are the same as previous three, but colored by speed score
 # shows that the first RF model and kNN model underestimate wOBA for faster players
@@ -38,17 +34,13 @@ p <- create_scatterplot(data=sub.oneyear,x.col="rf_wOBA",y.col="wOBA",color.col=
 print(p)
 
 # regress wOBA on rf_wOBA and SBperAB, then plot wOBA vs. fitted values to account for this
-p <- create_scatterplot(data=sub.oneyear,x.col="rf.lmod_wOBA",y.col="wOBA",color.col="Spd")
-print(p)
-
-p <- create_scatterplot(data=sub.oneyear,x.col="rf.speed_wOBA",y.col="wOBA",color.col="Spd")
+p <- create_scatterplot(data=sub.oneyear,x.col="rf_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
 p <- create_scatterplot(data=sub.oneyear,x.col="knn_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
-# regress wOBA on rf_wOBA and SBperAB, then plot wOBA vs. fitted values to account for this
-p <- create_scatterplot(data=sub.oneyear,x.col="knn.lmod_wOBA",y.col="wOBA",color.col="Spd")
+p <- create_scatterplot(data=sub.oneyear,x.col="mlb.x_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
 
@@ -65,23 +57,12 @@ print(p)
 p <- create_scatterplot(data=sub.lag,x.col="rf_wOBA.prev",y.col="wOBA")
 print(p)
 
-p <- create_scatterplot(data=sub.lag,x.col="rf.speed_wOBA.prev",y.col="wOBA")
-print(p)
-
-p <- create_scatterplot(data=sub.lag,x.col="rf.lmod_wOBA.prev",y.col="wOBA")
-print(p)
-
 p <- create_scatterplot(data=sub.lag,x.col="knn_wOBA.prev",y.col="wOBA")
-print(p)
-
-p <- create_scatterplot(data=sub.lag,x.col="knn.lmod_wOBA.prev",y.col="wOBA")
 print(p)
 
 p <- create_scatterplot(data=sub.lag,x.col="multinom_wOBA.prev",y.col="wOBA")
 print(p)
 
-p <- create_scatterplot(data=sub.lag,x.col="lda_wOBA.prev",y.col="wOBA")
-print(p)
 
 
 # check other stats -------------------------------------------------------

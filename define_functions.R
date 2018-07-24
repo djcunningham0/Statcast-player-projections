@@ -4,12 +4,13 @@
 #' 
 #' @return a data frame with all of the necessary columns (plus some extras)
 #' 
-format_data_frame <- function(df, lw=NULL) {
+format_data_frame <- function(df, lw=NULL, lw_multiplier=NULL) {
   require(dplyr)
   
   if (is.null(lw)) {
     tmp <- set_linear_weights()
     lw <- tmp$lw
+    lw_multiplier = tmp$multiplier
   }
   
   # create new data frame with possibly relevant columns
@@ -81,7 +82,9 @@ format_data_frame <- function(df, lw=NULL) {
                                            class == "double" ~ lw["double"],
                                            class == "triple" ~ lw["triple"],
                                            class == "home_run" ~ lw["home_run"],
-                                           TRUE ~ lw["out"]), 3))
+                                           TRUE ~ lw["out"]), 3)) %>% 
+    # calculate MLB's xwOBA with this field (rename so it works with functions later)
+    mutate(mlb_x_linear_weight = estimated_woba_using_speedangle / lw_multiplier)
   
   # relevel shift so "Standard" is reference level
   batted$shift <- batted$shift %>% 
@@ -97,11 +100,11 @@ format_data_frame <- function(df, lw=NULL) {
   return(batted)
 }
 
-#' @param years vector of years (take average of coefficients across these years)
+#' @param years vector of years (average coefficients across these years)
 #' 
 #' @return linear weight values and the multiplier to convert to OBP scale
 #' 
-set_linear_weights <- function(years=2017) {
+set_linear_weights <- function(years=2015:2017) {
   # add linear weight values
   # linear weights reference: https://www.fangraphs.com/library/principles/linear-weights/
   # values from https://www.fangraphs.com/guts.aspx?type=cn
@@ -135,10 +138,16 @@ predict_lw_from_probs <- function(probs, lw) {
 #' @param prefix the prefix for the column names (e.g., multinom, rf, knn, etc.)
 #' @param df data frame of batted balls to add prediction columns to
 #' @param probs predicted probabilities of each class (single, double, etc.)
+#' @param lw vector of linear weight values
 #' 
 #' @return df with columns for predicted linear weight and probability of each hit type
 #' 
-add_preds_from_probs <- function(df, prefix, probs, lw) {
+add_preds_from_probs <- function(df, prefix, probs, lw=NULL) {
+  if (is.null(lw)) {
+    tmp <- set_linear_weights()
+    lw <- tmp$lw
+  }
+  
   # predict linear weights and add to df
   df[,paste0(prefix,"_linear_weight")] <- predict_lw_from_probs(probs, lw)
   
@@ -216,7 +225,7 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
     grouping_cols <- c("key_mlbam","Season","Spd")
   }
   
-  cols <- c(grouping_cols, "linear_weight", cols)
+  cols <- c(grouping_cols, "linear_weight", "mlb_x_linear_weight", cols)
   weights.df <- df %>% 
     select(cols) %>% 
     group_by_at(grouping_cols) %>% 
@@ -228,10 +237,19 @@ group_weights_by_year <- function(df, lw.prefixes=NULL, full.prefixes=NULL, by_m
 #' 
 #' @param weights.df data frame of weights from group_weights_by_year
 #' @param lw.prefixes vector of prefixes for models with linear weight predictions
+#' @param lw vector of linear weight values
+#' @param lw_multiplier scaling constant for wOBA
 #' 
 #' @return a data frame grouped by player and year with predicted linear weights and wOBA
 #' 
-add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL) {
+add_preds_to_yearly_data <- function(weights.df, lw.prefixes=NULL, lw=NULL,
+                                     lw_multiplier=NULL) {
+  if (is.null(lw)) {
+    tmp <- set_linear_weights()
+    lw <- tmp$lw
+    lw_multiplier <- tmp$multiplier
+  }
+  
   if (is.null(lw.prefixes)) { lw.prefixes <- get_prefixes(weights.df, type="lw") }
   
   minYear <- min(weights.df$Season)
