@@ -40,6 +40,7 @@ p5 <- basic_scatterplot(Teams, x.col="RperG", y.col="wOBA", xlab="R/G", ylab="wO
 
 # display this plot
 # (exclude SLG% so we get a 2x2 grid)
+library(gridExtra)
 grid.arrange(p1,p2,p4,p5)
 
 
