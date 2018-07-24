@@ -6,6 +6,5 @@ ZiPS projections 2018.csv
 Clay Davenport 2017.csv
 notes and to do.R
 .DS_Store
-completed_seasons_statcast_all_pitches.rds
-current_season_statcast_all_pitches.rds
-knn.rds
+data/
+models/
