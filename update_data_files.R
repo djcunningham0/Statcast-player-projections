@@ -80,9 +80,9 @@ days_since <- function(date) {
 #' me to get linear weights w/o an internet connection
 update_linear_weights <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
   require(baseballr, quietly=TRUE, warn.conflicts=FALSE)
-
+  
+  print("Updating linear weights...")
   path <- format_directory_path(path)
-
   saveRDS(fg_guts(), file=paste0(path, "linear_weight_coefs.rds"))
 
   # stamp today's date in the last update file
@@ -93,7 +93,8 @@ update_linear_weights <- function(path="/Users/Daniel/Documents/University of Ch
 update_crosswalk <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
   require(readr, quietly=TRUE, warn.conflicts=FALSE)
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
-
+  
+  print("Updating crosswalk...")
   path <- format_directory_path(path)
 
   url <- "http://raw.githubusercontent.com/chadwickbureau/register/master/data/people.csv"
@@ -110,6 +111,7 @@ update_crosswalk <- function(path="/Users/Daniel/Documents/University of Chicago
 #' update the speed_scores.rds
 update_speed_scores <- function(start_year=2015, end_year=get_current_season_year(), agg=FALSE,
                                 path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
+  print("Updating speed scores...")
   path <- format_directory_path(path)
 
   # scrape speed scores and update the RDS file
@@ -123,6 +125,7 @@ update_speed_scores <- function(start_year=2015, end_year=get_current_season_yea
 #'
 update_current_season_summary <- function(year=get_current_season_year(),
                                           path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
+  print("Updating current season summary...")
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
@@ -136,6 +139,7 @@ update_current_season_summary <- function(year=get_current_season_year(),
 #'
 update_completed_seasons_summary <- function(start_year=2013, end_year=get_last_completed_season_year(),
                                              path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
+  print("Updating completed seasons summary...")
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
@@ -151,9 +155,11 @@ update_current_season_statcast <- function(year=get_current_season_year(),
                                            full_rebuild=FALSE,
                                            path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
                                            all.pitches.name="current_season_statcast_all_pitches.rds",
-                                           batted.name="current_season_statcast_batted_balls.rds") {
+                                           batted.name="current_season_statcast_batted_balls.rds",
+                                           verbose=FALSE) {
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
-
+  
+  print("Updating current season Statcast...")
   path <- format_directory_path(path)
 
   if (!file.exists(paste0(path, batted.name))) {
@@ -177,7 +183,8 @@ update_current_season_statcast <- function(year=get_current_season_year(),
     print("Beginning full rebuild of current season Statcast files.")
     pull_statcast_data(startYear=year, endYear=year, directory=path,
                        pitches_file=all.pitches.name,
-                       batted_file=batted.name)
+                       batted_file=batted.name,
+                       verbose=verbose)
     print("Completed full rebuild of current season Statcast files.")
 
     register_updates("current_season_statcast", path=path)
@@ -186,17 +193,21 @@ update_current_season_statcast <- function(year=get_current_season_year(),
     # partial build: add the days that haven't been pulled yet
     print("Beginning partial build of current season Statcast files.")
     out <- pull_statcast_data(startYear=year, endYear=year, directory=NULL,
-                              startDate=next.date)
+                              startDate=next.date, verbose=verbose)
 
     # coerce everything to character, then merge, then reformat, then save
     cur.pitches.file <- cur.pitches.file %>%
       mutate_all(as.character)
     cur.batted.file <- cur.batted.file %>%
       mutate_all(as.character)
+    new.pitches <- out$all %>% 
+      mutate_all(as.character)
+    new.batted <- out$batted %>% 
+      mutate_all(as.character)
 
-    all_pitches <- bind_rows(cur.pitches.file, out$all) %>%
+    all_pitches <- bind_rows(cur.pitches.file, new.pitches) %>%
       format_statcast_fields()
-    batted <- bind_rows(cur.batted.file, out$batted) %>%
+    batted <- bind_rows(cur.batted.file, new.batted) %>%
       format_statcast_fields()
 
     saveRDS(all_pitches, file=paste0(path, all.pitches.name))
@@ -214,6 +225,7 @@ rebuild_completed_seasons_statcast <- function(start_year=2015,
                                                path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
                                                all.pitches.name="completed_seasons_statcast_all_pitches.rds",
                                                batted.name="completed_seasons_statcast_batted_balls.rds") {
+  print("Updating completed seasons Statcast...")
   path <- format_directory_path(path)
 
   print("Beginning full rebuild of completed season Statcast files.")
@@ -374,11 +386,12 @@ reset_last_updates_file <- function(which=NULL,
 #' @param startDate start date in "mm-dd" format
 #' @param endDate end date in "mm-dd" format
 #' @param showTime if TRUE, print the total elapsed time
+#' @param verbose if TRUE, print message after each completed date
 pull_statcast_data <- function(startYear, endYear=startYear,
-                               directory="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
-                               pitches_file=str_c(directory, "all_pitches_by_batter_",startYear,"-",endYear,".rds"),
-                               batted_file=str_c(directory, "batted_balls_",startYear,"-",endYear,".rds"),
-                               flush=50, startDate=NA, endDate=NA, showTime=FALSE) {
+                               directory=NULL,
+                               pitches_file=paste0("all_pitches_by_batter_",startYear,"-",endYear,".rds"),
+                               batted_file=paste0("batted_balls_",startYear,"-",endYear,".rds"),
+                               flush=50, startDate=NA, endDate=NA, showTime=FALSE, verbose=TRUE) {
   require(baseballr, quietly=TRUE, warn.conflicts=FALSE)
   require(readr, quietly=TRUE, warn.conflicts=FALSE)
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
@@ -427,10 +440,10 @@ pull_statcast_data <- function(startYear, endYear=startYear,
       # attempt to scrape statcast data for each date
       # do it one day at a time because the function doesn't work well when pulling many days
       tryCatch(
-        {oneday <- scrape_statcast_savant_batter_all(start_date=as.Date(date),
-                                                     end_date=as.Date(date))
+        {oneday <- suppressMessages(scrape_statcast_savant_batter_all(start_date=as.Date(date),
+                                                                      end_date=as.Date(date)))
         },
-        warning=function(war) {print(str_c("---- Warning: ",date," ----"))},
+        warning=function(war) {if (verbose) {print(str_c("---- Warning: ",date," ----"))}},
         error=function(err) {print(str_c("**** Error: ",date," ****"))}
       )
       if (!is.null(oneday)) {
@@ -438,7 +451,9 @@ pull_statcast_data <- function(startYear, endYear=startYear,
         oneday <- oneday %>%
           mutate_all(as.character)
         tmpdata <- bind_rows(tmpdata, oneday)   # merge into tmpdata
-        print(str_c("Completed ",date))
+        if (verbose) {
+          print(str_c("Completed ",date))
+        }
       }
       date <- date+1
       # periodically merge with alldata and flush tmpdata so we're not merging the huge data frame each time
@@ -454,7 +469,9 @@ pull_statcast_data <- function(startYear, endYear=startYear,
       format_statcast_fields() %>%
       mutate(game_month = month(game_date))
   }
-  print("Done downloading data.")
+  if (verbose) {
+    print("Done downloading data.")
+  }
 
   if (is.null(alldata)) {
     print("No data for date range.")
