@@ -86,7 +86,7 @@ update_completed_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, k
   batting.df <- group_weights_by_year(batted) %>% 
     add_preds_to_yearly_data(lw=lw, lw_multiplier=lw_multiplier, current_season=FALSE)
   
-  saveRDS(batting.df, file="./prediction_data/completed_season_wOBA_preds.rds")
+  saveRDS(batting.df, file="./prediction_data/completed_seasons_wOBA_preds.rds")
 }
 
 #' Add predictions from a classification model to batted ball dataframe
