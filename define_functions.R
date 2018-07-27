@@ -110,7 +110,6 @@ set_linear_weights <- function(years=2015:2017) {
   # values from https://www.fangraphs.com/guts.aspx?type=cn
   # currently using 2017 values
   require(dplyr)
-  require(baseballr)
   
   lw.df <- readRDS("./data/linear_weight_coefs.rds") %>% 
     filter(season %in% years)
