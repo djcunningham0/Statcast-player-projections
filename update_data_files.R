@@ -15,7 +15,6 @@
 #' functions can also be run on an ad hoc basis. The reset_last_updates function
 #' can be run to force all of the files to be fully rebuilt on the next run.
 
-setwd("/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights")
 source("./data_update_utilities.R")
 
 #' wrapper function that calls the other functions defined below
