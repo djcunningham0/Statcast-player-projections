@@ -1,6 +1,8 @@
 # Statcast Player Projections
 
-Main file is "Statcast modeling.R". It's not very organized right now but I'll be updating it and adding details here eventually.
+This repo is a bit of a mess right now. Sorry! I'll be organizing it and adding documentation (hopefully) before the end of the 2018 season.
+
+The file with most of the analysis I did is "Statcast modeling.R". For the most part, the other files either define helper functions, create visualizations, or update my local data files (which are then copied to a Dropbox folder).
 
 (details coming soon)
 
