@@ -10,3 +10,4 @@ data/
 models/
 prediction_data/
 .httr-oauth
+rsconnect/
