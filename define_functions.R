@@ -250,14 +250,17 @@ lag_yearly_data <- function(batting.df) {
   require(stringr)
   
   batting_lagged <- batting.df %>% 
-    mutate(next_year = Season + 1)
+    mutate(next_year = Season + 1) %>% 
+    select(-key_bbref, -key_fangraphs, -position, -Team, -Age)
   
   cur.df <- batting_lagged %>% select(-next_year)
   next.df <- batting_lagged %>% select(-Season)
   batting_lagged <- cur.df %>%
     inner_join(next.df, by=c("key_mlbam", "Season"="next_year"))
-  colnames(batting_lagged) <- str_replace(colnames(batting_lagged), ".x", "")
-  colnames(batting_lagged) <- str_replace(colnames(batting_lagged), ".y", ".prev")
+  
+  colnames(batting_lagged) <- colnames(batting_lagged) %>% 
+    str_replace(fixed(".x"), "") %>% 
+    str_replace(fixed(".y"), ".prev")
   
   return(batting_lagged)
 }
@@ -630,6 +633,7 @@ add_steamer_to_eval_df <- function(eval_df, steamer_df) {
 }
 
 #' Compute some summary statistics for the projection methods (correlation, MAE, and RMSE).
+#' TO DO: add rank correlation
 #' 
 #' @param eval_df data frame from get_marcel_eval_df
 #' @param stat which stat to evaluate (e.g., "wOBA", "OPS", etc.)
@@ -811,7 +815,7 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
   x <- data[,x.col]
   y <- data[,y.col]
   if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
-                                                        round(cor(x,y,use="pair"),3)) }
+                                                        round(cor(x,y,use="pair"),2)) }
   
   # set point labels for using ggplotly
   label <- NULL
