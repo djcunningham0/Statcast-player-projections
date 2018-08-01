@@ -14,7 +14,7 @@ if (!exists("original_batted") || !is.data.frame(get("original_batted"))) {
            })
 }
 
-batted <- format_data_frame(original_batted)
+batted <- format_data_frame(original_batted, lw_year=2015:2017)
 
 
 # fit OLS model --------------------------------------------------------
@@ -141,10 +141,10 @@ marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 
 # 2016 projections
-eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.df, AB_cutoff=AB_cutoff)
-marcel_eval_plot(eval.df.2016, model_desc="Marcel")
-marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF")
-marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
+# eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.df, AB_cutoff=AB_cutoff)
+# marcel_eval_plot(eval.df.2016, model_desc="Marcel")
+# marcel_eval_plot(eval.df.2016, model_prefix="rf", model_desc="RF")
+# marcel_eval_plot(eval.df.2016, model_prefix="knn", model_desc="kNN")
 
 # 2007 projections
 # match the analysis here:
@@ -169,7 +169,9 @@ summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 # visualize correlation, MAE, and RMSE in a plot
 p <- plot_projection_summary(summary.2017.wOBA,
                              which=c("marcel", "steamer", "multinom", "rf"), 
-                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             plot.title="Relative Accuracy of\nProjections",
+                             subtitle=NULL); print(p)
 
 p <- plot_projection_summary(summary.2017.OPS,
                              which=c("marcel", "steamer", "multinom", "rf"), 

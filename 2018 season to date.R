@@ -2,16 +2,15 @@ source("./define_functions.R")
 
 original_batted.2018 <- readRDS("./data/current_season_statcast_batted_balls.rds")
 
-tmp <- set_linear_weights(2018)
+tmp <- set_linear_weights(years=2018)
 lw <- tmp$lw
 lw_multiplier <- tmp$multiplier
-batted.2018 <- format_data_frame(original_batted.2018, lw)
+batted.2018 <- format_data_frame(original_batted.2018, lw=lw, lw_multiplier=lw_multiplier)
 
 library(randomForest)
 rf <- readRDS("./models/rf.rds")
 probs.rf.2018 <- predict(rf, newdata=batted.2018, type="prob")
-batted.2018 <- add_preds_from_probs(batted.2018, "rf", probs.rf.2018, lw)
-
+batted.2018 <- add_preds_from_probs(batted.2018, "rf", probs.rf.2018, lw_year=2018)
 
 weights.df.2018 <- group_weights_by_year(batted.2018)
 
