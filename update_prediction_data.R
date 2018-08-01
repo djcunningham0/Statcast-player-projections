@@ -147,5 +147,63 @@ add_model_preds <- function(df, lw, model, prefix) {
   return(add_preds_from_probs(df=df, prefix=prefix, probs=probs, lw=lw))
 }
 
+
+update_rf_prediction_grid <- function(out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/",
+                                      rf=readRDS("/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/models/rf.rds"),
+                                      launch_speed=seq(50, 120, 5),
+                                      launch_angle=seq(-40, 85, 5),
+                                      spray_angle=seq(-45, 45, 5),
+                                      Spd=seq(1, 9, 0.5),
+                                      home_team=rf$forest$xlevels$home_team,
+                                      start=NULL,
+                                      step_size=50000,
+                                      force_rebuild=FALSE) {
+  require(randomForest)
+  out_path <- format_directory_path(out_path)
+  out_file <- paste0(out_path, "rf_probs.rds")
+  
+  if (file.exists(out_file) & !force_rebuild) {
+    grid <- readRDS(out_file)
+  } else {
+    grid <- expand.grid(launch_speed=launch_speed, 
+                        launch_angle=launch_angle, 
+                        spray_angle=spray_angle, 
+                        Spd=Spd, 
+                        home_team=home_team)
+    grid$out      <- NA
+    grid$single   <- NA
+    grid$double   <- NA
+    grid$triple   <- NA
+    grid$home_run <- NA
+  }
+  
+  home_team_levels <- factor(home_team)
+  
+  if (!is.null(start)) {
+    i <- start
+  } else {
+    # start at first row that has NA predictions
+    i <- min(which(is.na(grid$out)))
+  }
+  
+  n <- nrow(grid)
+  
+  while (i <= n) {
+    cat("row ", i, " (of ", n, ")\n", sep="")
+    end <- min(n, i + step_size - 1)
+    
+    # predict chunk of 50000 rows, then update those rows in the grid
+    preds <- predict(rf, newdata=grid[i:end, 1:5], type="prob")
+    grid[i:end, 6:10] <- preds[,c("out", "single", "double", "triple", "home_run")]
+    
+    # save progress
+    saveRDS(grid, file=out_file)
+    
+    i <- end + 1
+  }
+  
+  register_updates("rf_probs", out_path)
+}
+
 path <- "/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/"
 update_all_preds(out_path=path)
