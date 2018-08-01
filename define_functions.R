@@ -4,11 +4,11 @@
 #' 
 #' @return a data frame with all of the necessary columns (plus some extras)
 #' 
-format_data_frame <- function(df, lw=NULL, lw_multiplier=NULL) {
+format_data_frame <- function(df, lw=NULL, lw_multiplier=NULL, lw_year=2015:2017) {
   require(dplyr)
   
-  if (is.null(lw)) {
-    tmp <- set_linear_weights()
+  if (is.null(lw) | is.null(lw_multiplier)) {
+    tmp <- set_linear_weights(years=lw_year)
     lw <- tmp$lw
     lw_multiplier = tmp$multiplier
   }
@@ -130,9 +130,9 @@ set_linear_weights <- function(years=2015:2017) {
 #' 
 #' @return df with columns for predicted linear weight and probability of each hit type
 #' 
-add_preds_from_probs <- function(df, prefix, probs, lw=NULL) {
+add_preds_from_probs <- function(df, prefix, probs, lw=NULL, lw_year=2015:2017) {
   if (is.null(lw)) {
-    tmp <- set_linear_weights()
+    tmp <- set_linear_weights(years=lw_year)
     lw <- tmp$lw
   }
   
@@ -815,7 +815,8 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
   x <- data[,x.col]
   y <- data[,y.col]
   if (includeCorrelation == TRUE) { plotTitle <- paste0(plotTitle,"\nCorrelation: ",
-                                                        round(cor(x,y,use="pair"),2)) }
+                                                        formatC(cor(x,y,use="pair"), digits=3,
+                                                                format="f")) }
   
   # set point labels for using ggplotly
   label <- NULL
