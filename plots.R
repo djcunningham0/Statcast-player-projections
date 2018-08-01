@@ -11,21 +11,25 @@ print(p.lm)
 
 # first few plots are just a gut check
 # (make sure the models are correlated with wOBA)
-p <- create_scatterplot(data=sub.oneyear,x.col="rf_wOBA",y.col="wOBA",
-                       xlab="random forest wOBA prediction",plotTitle="wOBA vs. RF prediction")
+p <- create_scatterplot(data=sub.oneyear, x.col="rf_wOBA", y.col="wOBA",
+                        xlab="RF wOBA prediction",plotTitle="wOBA vs. RF prediction",
+                        center_title=TRUE, point_alpha=0.7)
 print(p)
-# ggplotly(p1)
+ggplotly(p)
 
 p3 <- create_scatterplot(data=sub.oneyear,x.col="knn_wOBA",y.col="wOBA",
                         xlab="kNN wOBA prediction",plotTitle="wOBA vs. kNN prediction")
 print(p3)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="multinom_wOBA",y.col="wOBA")
+p <- create_scatterplot(data=sub.oneyear, x.col="multinom_wOBA", y.col="wOBA", 
+                        xlab="MLR wOBA prediction", plotTitle="wOBA vs. MLR prediction",
+                        center_title=TRUE, point_alpha=0.7)
 print(p)
 # ggplotly(p)
 
-p <- create_scatterplot(data=sub.oneyear,x.col="mlbx_wOBA",y.col="wOBA",
-                        xlab="MLB xwOBA", plotTitle="wOBA vs. xwOBA")
+p <- create_scatterplot(data=sub.oneyear, x.col="mlbx_wOBA", y.col="wOBA",
+                        xlab="MLB xwOBA", plotTitle="wOBA vs. xwOBA",
+                        center_title=TRUE, point_alpha=0.7)
 print(p)
 
 # next three plots are the same as previous three, but colored by speed score
@@ -47,20 +51,39 @@ print(p)
 # check wOBA correlation between years -----------------------------------------
 
 # plot this year's wOBA vs. last year's wOBA (some correlation but not a lot)
-p <- create_scatterplot(data=sub.lag,x.col="wOBA.prev",y.col="wOBA")
+p <- create_scatterplot(data=sub.lag,x.col="wOBA.prev",y.col="wOBA",
+                        xlab="previous season wOBA", plotTitle="wOBA vs. Previous wOBA",
+                        center_title=TRUE)
 print(p)
 
 # plot current year's wOBA vs. predictions from last year's data
 p <- create_scatterplot(data=sub.lag,x.col="lm_wOBA.prev",y.col="wOBA")
 print(p)
 
-p <- create_scatterplot(data=sub.lag,x.col="rf_wOBA.prev",y.col="wOBA")
+p <- create_scatterplot(data=sub.lag,x.col="rf_wOBA.prev",y.col="wOBA",
+                        xlab="previous season RF wOBA", plotTitle="wOBA vs. Previous RF wOBA",
+                        center_title=TRUE)
+print(p)
+
+p <- create_scatterplot(data=sub.lag,x.col="mlbx_wOBA.prev",y.col="wOBA",
+                        xlab="previous season MLB xwOBA", plotTitle="wOBA vs. Previous MLB xwOBA",
+                        center_title=TRUE)
 print(p)
 
 p <- create_scatterplot(data=sub.lag,x.col="knn_wOBA.prev",y.col="wOBA")
 print(p)
 
 p <- create_scatterplot(data=sub.lag,x.col="multinom_wOBA.prev",y.col="wOBA")
+print(p)
+
+# how well do the "expected" stats correlate with themselves?
+p <- create_scatterplot(data=sub.lag, x.col="rf_wOBA.prev", y.col="rf_wOBA")
+print(p)
+
+p <- create_scatterplot(data=sub.lag, x.col="mlbx_wOBA.prev", y.col="mlbx_wOBA")
+print(p)
+
+p <- create_scatterplot(data=sub.lag, x.col="multinom_wOBA.prev", y.col="multinom_wOBA")
 print(p)
 
 
