@@ -13,6 +13,8 @@ https://djcunningham0.shinyapps.io/statcast-enhanced-batting-projections/
 
 I'll be adding more content and functionality on an ongoing basis.
 
+# Presentations
+
 ## Saberseminar 2018
 
 8/5/2018
@@ -25,6 +27,6 @@ Presentation title: "Predicting Future Hitting Performance from Statcast Batted 
 
 Presentation slides: https://drive.google.com/drive/folders/13maZpQ78Sl3GYZMx5L7dZn5gJ__Mcjwt?usp=sharing
 
-## Contact Info
+# Contact Info
 
 djcunningham0@gmail.com
