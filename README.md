@@ -6,6 +6,17 @@ Statcast modeling.R contains most of my analysis. The other files are primarily 
 
 (details coming soon)
 
+# R Shiny Web App
+
+You can explore the projections and model predictions in my web app made with R Shiny:
+https://djcunningham0.shinyapps.io/statcast-enhanced-batting-projections/
+
+I'll be adding more content and functionality on an ongoing basis.
+
+## Saberseminar 2018
+
+8/5/2018
+
 ## GLASC 2018
 
 6/21/2018
