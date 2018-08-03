@@ -1,4 +1,4 @@
-# Statcast Player Projections
+# Statcast-Enhanced Player Projections
 
 This repo is a bit of a mess right now. Sorry! I'll be organizing it and adding documentation (hopefully) before the end of the 2018 season.
 
