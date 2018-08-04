@@ -55,6 +55,31 @@ update_current_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, knn
   batting.df <- group_weights_by_year(batted) %>% 
     add_preds_to_yearly_data(lw=lw, lw_multiplier=lw_multiplier, current_season=TRUE)
   
+  if (rf_model) {
+    batting.df <- batting.df %>% 
+      mutate(rf_H = rf_single + rf_double + rf_triple + rf_home_run,
+             rf_AVG = rf_H / AB,
+             rf_OBP = (rf_H + BB + HBP) / (AB + BB + HBP + SF),
+             rf_SLG = (rf_single + 2*rf_double + 3*rf_triple + 4*rf_home_run) / AB,
+             rf_OPS = rf_OBP + rf_SLG)
+  }
+  if (multinom_model) {
+    batting.df <- batting.df %>% 
+      mutate(multinom_H = multinom_single + multinom_double + multinom_triple + multinom_home_run,
+             multinom_AVG = multinom_H / AB,
+             multinom_OBP = (multinom_H + BB + HBP) / (AB + BB + HBP + SF),
+             multinom_SLG = (multinom_single + 2*multinom_double + 3*multinom_triple + 4*multinom_home_run) / AB,
+             multinom_OPS = multinom_OBP + multinom_SLG)
+  }
+  if (knn_model) {
+    batting.df <- batting.df %>% 
+      mutate(knn_H = knn_single + knn_double + knn_triple + knn_home_run,
+             knn_AVG = knn_H / AB,
+             knn_OBP = (knn_H + BB + HBP) / (AB + BB + HBP + SF),
+             knn_SLG = (knn_single + 2*knn_double + 3*knn_triple + 4*knn_home_run) / AB,
+             knn_OPS = knn_OBP + knn_SLG)
+  }
+  
   saveRDS(batting.df, file=paste0(out_path, "current_season_wOBA_preds.rds"))
   
   register_updates("current_season", out_path)
@@ -98,6 +123,31 @@ update_completed_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, k
   batting.df <- group_weights_by_year(batted) %>% 
     add_preds_to_yearly_data(lw=lw, lw_multiplier=lw_multiplier, current_season=FALSE)
   
+  if (rf_model) {
+    batting.df <- batting.df %>% 
+      mutate(rf_H = rf_single + rf_double + rf_triple + rf_home_run,
+             rf_AVG = rf_H / AB,
+             rf_OBP = (rf_H + BB + HBP) / (AB + BB + HBP + SF),
+             rf_SLG = (rf_single + 2*rf_double + 3*rf_triple + 4*rf_home_run) / AB,
+             rf_OPS = rf_OBP + rf_SLG)
+  }
+  if (multinom_model) {
+    batting.df <- batting.df %>% 
+      mutate(multinom_H = multinom_single + multinom_double + multinom_triple + multinom_home_run,
+             multinom_AVG = multinom_H / AB,
+             multinom_OBP = (multinom_H + BB + HBP) / (AB + BB + HBP + SF),
+             multinom_SLG = (multinom_single + 2*multinom_double + 3*multinom_triple + 4*multinom_home_run) / AB,
+             multinom_OPS = multinom_OBP + multinom_SLG)
+  }
+  if (knn_model) {
+    batting.df <- batting.df %>% 
+      mutate(knn_H = knn_single + knn_double + knn_triple + knn_home_run,
+             knn_AVG = knn_H / AB,
+             knn_OBP = (knn_H + BB + HBP) / (AB + BB + HBP + SF),
+             knn_SLG = (knn_single + 2*knn_double + 3*knn_triple + 4*knn_home_run) / AB,
+             knn_OPS = knn_OBP + knn_SLG)
+  }
+  
   saveRDS(batting.df, file=paste0(out_path, "completed_seasons_wOBA_preds.rds"))
   
   register_updates("completed_seasons", out_path)
@@ -119,7 +169,8 @@ update_marcel_projections <- function(out_path="/Users/Daniel/Documents/Universi
   # TO DO: change this so it does partial Statcast-enhanced Marcel for 2017 
   # (will probably require updating how I'm creating some data files)
   projection_df <- c()
-  for (year in (all_years[3]+1):(tail(all_years, 1)+1)) {
+  # for (year in (all_years[3]+1):(tail(all_years, 1)+1)) {
+  for (year in 2017:(tail(all_years, 1)+1)) {
     marcel_df <- get_marcel_eval_df(year, lw_years=(year-3):(year-1), 
                                     pred_df=batting.df, include_true_stats=FALSE)
     
