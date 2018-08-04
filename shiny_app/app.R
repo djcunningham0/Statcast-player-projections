@@ -99,6 +99,10 @@ marcel_df <- dropbox_readRDS("/statcast_modeling_data/prediction_data/marcel_pro
 
 rf_probs <- dropbox_readRDS("/statcast_modeling_data/prediction_data/rf_probs.rds")
 
+lucky_df  <- dropbox_readRDS("/statcast_modeling_data/prediction_data/current_season_wOBA_preds.rds") %>% 
+  bind_rows(dropbox_readRDS("/statcast_modeling_data/prediction_data/completed_seasons_wOBA_preds.rds"))
+
+
 
 # variables for ui and server ---------------------------------------------
 method_choices <- c("Standard Marcel projections", 
@@ -112,6 +116,7 @@ email_url  <- a(href="mailto:djcunningham0@gmail.com?subject=Statcast player pro
 
 Spd_url <- a(href="https://www.fangraphs.com/library/offense/spd/",
              "speed scores")
+
 
 # these need to match the discrete values in rf_probs
 exit_velo_choices    <- list(vals=seq(50, 120, 5), default=85, step=5)
@@ -130,6 +135,8 @@ ui <- dashboardPage(
     sidebarMenu(
       menuItem("Batted Ball Predictions", tabName="batted", icon=icon("baseball-ball"))
       ,menuItem("Projections", tabName="projections", icon=icon("database"))
+      ,menuItem("Who's Been Lucky?", tabName="lucky", icon=icon("baseball-ball"))
+      ,menuItem("More Coming Soon!", tabName="more")
     )
   )
   
@@ -137,9 +144,12 @@ ui <- dashboardPage(
     
     tabItems(
       
+      
+      # begin batted balls tab
       tabItem(
         tabName="batted"
         ,h2("Batted Ball Predictions")
+        
         ,p("Predictions are made using a random forest model (see", github_url,
            "for details and source code).")
         
@@ -190,12 +200,12 @@ ui <- dashboardPage(
         ) # end mainPanel - batted balls
       ) # end tabItem - batted balls
       
+      # begin projections tab
       ,tabItem(
         tabName="projections"
         ,h2("Full Season Projections")
-        ,p("More coming soon, but for now view or download the projections for the 2018 season",
-           "and explore hit probabilities for different batted balls.")
-        ,p("View the source code at", github_url, "or email me at", email_url, "with comments or questions.")
+        # ,p("More coming soon, but for now view or download the projections for the 2018 season",
+        #    "and explore hit probabilities for different batted balls.")
         
         ,fluidRow(
           column(
@@ -215,7 +225,7 @@ ui <- dashboardPage(
           ,column(
             width=2,
             selectInput("season", "Season",
-                        choices=c(2018))
+                        choices=sort(unique(marcel_df$Season), decreasing=TRUE))
           )
         )
         
@@ -226,8 +236,44 @@ ui <- dashboardPage(
           column(width=4, style='padding:5px')
         )
         
+        ,htmlOutput("note_2017")
+        ,div("filler", style="opacity:0.0;")
         ,dataTableOutput("datatable")
       ) # end tabItem - full season projections
+      
+      # begin lucky/unlucky tab
+      ,tabItem(
+        tabName="lucky"
+        
+        ,div(style="display:inline-block",
+             selectInput("lucky_season", "Season", 
+                         choices=sort(unique(lucky_df$Season), decreasing=TRUE),
+                         width="100px"))
+        ,div(style="display:inline-block",
+             selectInput("stat", "Statistic", 
+                         choices=c("wOBA", "OPS", "OBP", "SLG", "AVG", 
+                                   "H", "1B", "2B", "3B", "HR"),
+                         selected="wOBA",
+                         width="100px"))
+        ,div(style="display:inline-block",
+             numericInput("AB_cutoff", "Minimum ABs", 
+                         value=200,
+                         min=0,
+                         width="100px"))
+        
+        ,h2("Luckiest Batters")
+        ,dataTableOutput("lucky_table")
+        
+        ,h2("Unluckiest Batters")
+        ,dataTableOutput("unlucky_table")
+      ) # end tabItem - lucky
+      
+      ,tabItem(
+        tabName="more"
+        ,p("I'll be adding more content and functionality through the end of the 2018 season.")
+        ,p("In the meantime, view the source code at", github_url, 
+           "or email me at", email_url, "with comments or questions.")
+      ) # end tabItem - more
     ) # end tabItems
   ) # end dashboardBody
 ) # end dashboardPage
@@ -304,22 +350,29 @@ server <- function(input, output, session) {
   # end batted ball predictions
   
   # begin full season projections
-  cols <- reactive({
-    cols <- c("xH", "xX1B", "xX2B", "xX3B", "xHR",
-              "xBA", "xOBP", "xSLG", "xOPS", "xwOBA")
-    
-    if (input$method == method_choices[2]) {
-      cols <- paste0(cols, "_rf")
+  
+  vals <- reactiveValues()
+  
+  observeEvent(
+    input$method,
+    {
+      cols <- c("xH", "xX1B", "xX2B", "xX3B", "xHR",
+                "xBA", "xOBP", "xSLG", "xOPS", "xwOBA")
+      
+      if (input$method == method_choices[2]) {
+        cols <- paste0(cols, "_rf")
+      }
+      
+      cols <- c("Name", "xPA", "xAB", cols)
+      vals$cols <- cols
     }
-    
-    cols <- c("Name", "xPA", "xAB", cols)
-    cols
-  })
+  )
   
   output$datatable <- renderDataTable({
     out_df <- marcel_df %>%
-      filter(("ALL" %in% input$player) | (Name %in% input$player)) %>%
-      select(cols())
+      filter(("ALL" %in% input$player) | (Name %in% input$player),
+             Season == input$season) %>%
+      select(vals$cols)
     
     colnames(out_df) <- colnames(out_df) %>%
       strip_x() %>%
@@ -327,7 +380,7 @@ server <- function(input, output, session) {
     
     out_df
   }, options=list(autoWidth=FALSE
-                  ,order=list(length(cols())-1, 'desc')  # note, DataTable columns are 0-indexed
+                  ,order=list(length(vals$cols)-1, 'desc')  # note, DataTable columns are 0-indexed
                   ,columnDefs=list(list(width="120px", targets=0))
                   )
   )
@@ -338,7 +391,72 @@ server <- function(input, output, session) {
       write_csv(marcel_df, path=file)
     }
   )
+  
+  observeEvent(
+    list(input$season, input$method),
+    {
+      if (input$season == 2017 & input$method != method_choices[1]) {
+        vals$note_2017 <- "<b>Note:</b> 2017 projections are based partially on 2014 observed (not predicted) stats."
+      } else {
+        vals$note_2017 <- NULL
+      }
+    }
+  )
+  
+  output$note_2017 <- renderText(vals$note_2017)
+  
   # end full season projections
+  
+  # begin lucky batters
+  
+  observeEvent(
+    input$lucky_season,
+    {
+      vals$lucky_df <- lucky_df %>% 
+        filter(Season == input$lucky_season)
+    }
+  )
+  
+  observeEvent(
+    input$stat,
+    {
+      vals$lucky_cols <- switch(input$stat,
+                                "wOBA" = c("wOBA", "rf_wOBA", 3),
+                                "OPS"  = c("OPS", "rf_OPS", 3),
+                                "OBP"  = c("OBP", "rf_OBP", 3),
+                                "SLG"  = c("SLG", "rf_SLG", 3),
+                                "AVG"  = c("AVG", "rf_AVG", 3),
+                                "H"    = c("H", "rf_H", 1),
+                                "1B"   = c("X1B", "rf_single", 1),
+                                "2B"   = c("X2B", "rf_double", 1),
+                                "3B"   = c("X3B", "rf_triple", 1),
+                                "HR"   = c("HR", "rf_home_run", 1))
+    }
+  )
+  
+  observeEvent(
+    list(input$lucky_season, input$stat, input$AB_cutoff),
+    {
+      vals$lucky_table <- vals$lucky_df %>% 
+        select(Name, G, AB, vals$lucky_cols[1:2]) %>% 
+        filter(AB >= input$AB_cutoff) %>% 
+        mutate_at(vals$lucky_cols[1:2], round, as.numeric(vals$lucky_cols[3])) %>% 
+        mutate(Difference = !!as.name(vals$lucky_cols[1]) - !!as.name(vals$lucky_cols[2])) %>% 
+        rename_at(vals$lucky_cols[2], funs(paste0("Predicted")))
+    }
+  )
+  
+  output$lucky_table <- renderDataTable({
+    vals$lucky_table %>% 
+      arrange(desc(Difference))
+  }, options=list(autoWidth=FALSE, pageLength=10))
+  
+  output$unlucky_table <- renderDataTable({
+    vals$lucky_table %>% 
+      arrange(Difference)
+  }, options=list(autoWidth=FALSE, pageLength=10))
+  
+  # end lucky batters
   
 }
 
