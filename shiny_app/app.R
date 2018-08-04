@@ -229,7 +229,7 @@ ui <- dashboardPage(
           )
         )
         
-        ,downloadButton("download", "Download all projections")
+        ,downloadButton("download", "Download projections (all seasons)")
         
         ,fluidRow(
           width=4,
