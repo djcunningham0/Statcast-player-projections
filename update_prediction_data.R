@@ -199,6 +199,8 @@ add_model_preds <- function(df, lw, model, prefix) {
 }
 
 
+#' this batches predictions for the random forest model
+#' don't schedule this -- just run once if you update the model
 update_rf_prediction_grid <- function(out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/",
                                       rf=readRDS("/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/models/rf.rds"),
                                       launch_speed=seq(50, 120, 5),
