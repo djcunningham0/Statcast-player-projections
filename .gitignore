@@ -11,3 +11,4 @@ models/
 prediction_data/
 .httr-oauth
 rsconnect/
+my_google_tracking_id.R
