@@ -19,6 +19,10 @@ I'll be adding more content and functionality on an ongoing basis.
 
 8/5/2018
 
+Presentation title: "Improved Batting Projections Through Statcast Modeling"
+
+Presentation slides: https://drive.google.com/drive/folders/1B6AZS3bKpyVbMas20Zgo29W2zdvwRziO?usp=sharing
+
 ## GLASC 2018
 
 6/21/2018
