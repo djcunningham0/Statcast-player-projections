@@ -6,6 +6,17 @@ library(stringr)
 library(readr)
 library(lattice)
 library(NISTunits)
+library(lubridate)
+library(GAlogger)
+
+
+
+# start tracking ----------------------------------------------------------
+source("my_google_tracking_id.R")  # just contains my tracking ID (excluded from github)
+my_id <- my_google_tracking_id()
+ga_set_tracking_id(my_id)
+ga_set_approval(consent = TRUE)
+ga_collect_pageview(page="/home", title="Home")
 
 
 # define functions --------------------------------------------------------
@@ -18,6 +29,15 @@ dropbox_readRDS <- function(file, dest=tempdir(), ...) {
     drop_download(file, localfile, overwrite = TRUE)
   }
   readRDS(localfile, ...)
+}
+
+dropbox_read_file <- function(file, dest=tempdir(), ...) {
+  require(readr)
+  localfile = paste0(dest, "/", basename(file))
+  if (!file.exists(localfile)) {
+    drop_download(file, localfile, overwrite = TRUE)
+  }
+  read_file(localfile, ...)
 }
 
 #' strips the x's and X's from a string (useful for renaming columns in marcel_df)
@@ -100,8 +120,11 @@ marcel_df <- dropbox_readRDS("/statcast_modeling_data/prediction_data/marcel_pro
 rf_probs <- dropbox_readRDS("/statcast_modeling_data/prediction_data/rf_probs.rds")
 
 lucky_df  <- dropbox_readRDS("/statcast_modeling_data/prediction_data/current_season_wOBA_preds.rds") %>% 
-  bind_rows(dropbox_readRDS("/statcast_modeling_data/prediction_data/completed_seasons_wOBA_preds.rds"))
+  bind_rows(dropbox_readRDS("/statcast_modeling_data/prediction_data/completed_seasons_wOBA_preds.rds")) %>% 
+  arrange(desc(Season), key_mlbam)
 
+cur_season_max_date <- as.Date(dropbox_read_file("/statcast_modeling_data/data/max_date.txt"))
+cur_season_max_G <- as.numeric(dropbox_read_file("/statcast_modeling_data/data/max_G.txt"))
 
 
 # variables for ui and server ---------------------------------------------
@@ -230,11 +253,9 @@ ui <- dashboardPage(
         )
         
         ,downloadButton("download", "Download projections (all seasons)")
+        ,downloadButton("download_xstats", "Download xStats (all seasons)")
         
-        ,fluidRow(
-          width=4,
-          column(width=4, style='padding:5px')
-        )
+        ,fluidRow(width=4,column(width=4, style='padding:5px'))
         
         ,htmlOutput("note_2017")
         ,div("filler", style="opacity:0.0;")
@@ -260,6 +281,8 @@ ui <- dashboardPage(
                          value=200,
                          min=0,
                          width="100px"))
+        
+        ,htmlOutput("date_message")
         
         ,h2("Luckiest Batters")
         ,dataTableOutput("lucky_table")
@@ -287,6 +310,7 @@ server <- function(input, output, session) {
   observeEvent(
     input$random,
     {
+      ga_collect_event(event_category="Usage", event_action="randomize inputs")
       updateSliderInput(session, "exit_velocity", value=sample(exit_velo_choices$vals, 1))
       updateSliderInput(session, "launch_angle", value=sample(launch_angle_choices$vals, 1))
       updateSliderInput(session, "spray_angle", value=sample(spray_angle_choices$vals, 1))
@@ -323,6 +347,7 @@ server <- function(input, output, session) {
   
   ## prediction table
   output$probs <- renderTable({
+    ga_collect_pageview(page="/batted", title="Batted Ball Predictions")
     
     probs <- rf_probs %>% 
       filter(launch_speed == input$exit_velocity,
@@ -369,6 +394,8 @@ server <- function(input, output, session) {
   )
   
   output$datatable <- renderDataTable({
+    ga_collect_pageview(page="/projections", title="Full Season Projections")
+    
     out_df <- marcel_df %>%
       filter(("ALL" %in% input$player) | (Name %in% input$player),
              Season == input$season) %>%
@@ -388,7 +415,16 @@ server <- function(input, output, session) {
   output$download <- downloadHandler(
     filename="statcast_marcel_projections.csv",
     content=function(file) {
+      ga_collect_event(event_category="Download", event_action="download projections")
       write_csv(marcel_df, path=file)
+    }
+  )
+  
+  output$download_xstats <- downloadHandler(
+    filename="random_forest_xstats.csv",
+    content=function(file) {
+      ga_collect_event(event_category="Download", event_action="download xStats")
+      write_csv(lucky_df, path=file)
     }
   )
   
@@ -414,8 +450,18 @@ server <- function(input, output, session) {
     {
       vals$lucky_df <- lucky_df %>% 
         filter(Season == input$lucky_season)
+      
+      if ((input$lucky_season == format(Sys.Date(), "%Y")) & (cur_season_max_G < 162)) {
+        vals$date_message <- paste0("<b>Note:</b> Stats are current through ", 
+                                    month(cur_season_max_date), "/", day(cur_season_max_date), "/",
+                                    year(cur_season_max_date), " games.")
+      } else {
+        vals$date_message <- NULL
+      }
     }
   )
+  
+  output$date_message <- renderText(vals$date_message)
   
   observeEvent(
     input$stat,
@@ -447,14 +493,20 @@ server <- function(input, output, session) {
   )
   
   output$lucky_table <- renderDataTable({
+    ga_collect_pageview(page="/lucky", title="Lucky Batters")
+    
     vals$lucky_table %>% 
       arrange(desc(Difference))
-  }, options=list(autoWidth=FALSE, pageLength=10))
+  }, options=list(autoWidth=FALSE, 
+                  lengthMenu=list(c(5, 10, 25, -1), c(5, 10, 25, "All")),
+                  pageLength=10))
   
   output$unlucky_table <- renderDataTable({
     vals$lucky_table %>% 
       arrange(Difference)
-  }, options=list(autoWidth=FALSE, pageLength=10))
+  }, options=list(autoWidth=FALSE, 
+                  lengthMenu=list(c(5, 10, 25, -1), c(5, 10, 25, "All")),
+                  pageLength=10))
   
   # end lucky batters
   
