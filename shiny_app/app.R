@@ -496,17 +496,23 @@ server <- function(input, output, session) {
     ga_collect_pageview(page="/lucky", title="Lucky Batters")
     
     vals$lucky_table %>% 
-      arrange(desc(Difference))
+      arrange(desc(Difference)) %>% 
+      mutate(Rank = 1:n()) %>% 
+      select(Rank, everything())
   }, options=list(autoWidth=FALSE, 
                   lengthMenu=list(c(5, 10, 25, -1), c(5, 10, 25, "All")),
-                  pageLength=10))
+                  pageLength=10,
+                  columnDefs=list(list(width="1px", targets=0))))
   
   output$unlucky_table <- renderDataTable({
     vals$lucky_table %>% 
-      arrange(Difference)
+      arrange(Difference) %>% 
+      mutate(Rank = 1:n()) %>% 
+      select(Rank, everything())
   }, options=list(autoWidth=FALSE, 
                   lengthMenu=list(c(5, 10, 25, -1), c(5, 10, 25, "All")),
-                  pageLength=10))
+                  pageLength=10,
+                  columnDefs=list(list(width="1px", targets=0))))
   
   # end lucky batters
   
