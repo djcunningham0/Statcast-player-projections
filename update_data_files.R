@@ -216,10 +216,30 @@ update_current_season_statcast <- function(year=get_current_season_year(),
     print("Completed partial build of current season Statcast files.")
 
     register_updates("current_season_statcast", path=path)
+    
+    update_through_date()
   }
 }
 
-#'
+#' this function just produces a file with the maximum date in the current season statcast file
+#' for easy lookup in the R Shiny app
+#' It's called in the update_current_season_statcast function and can also be called on its own
+update_through_date <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
+                                data_file="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/current_season_statcast_batted_balls.rds") {
+  path <- format_directory_path(path)
+  
+  tmp <- readRDS(data_file)
+  max_date <- max(tmp$game_date)
+  
+  tmp <- tmp %>% select(batter, game_date) %>% distinct() %>% group_by(batter) %>% summarise(G=n())
+  max_G <- max(tmp$G)
+  
+  write(as.character(max_date), file=paste0(path, "max_date.txt"))
+  write(as.character(max_G), file=paste0(path, "max_G.txt"))
+}
+
+
+#' 
 rebuild_completed_seasons_statcast <- function(start_year=2015,
                                                end_year=get_last_completed_season_year(),
                                                path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
