@@ -176,8 +176,8 @@ ui <- dashboardPage(
         tabName="batted"
         ,h2("Batted Ball Predictions")
         
-        ,p("Predictions are made using a random forest model (see", github_url,
-           "for details and source code).")
+        ,p("Predictions are made using a random forest model (see the Methodology tab for details and", 
+           github_url, "for source code).")
         
         ,sidebarPanel(
           # note: the step sizes must match the discrete values in rf_probs
@@ -203,7 +203,7 @@ ui <- dashboardPage(
           ,div(p("More about ", Spd_url), style="font-size:80%")
           ,selectInput("ballpark", "Ballpark", choices=ballpark_choices)
           
-          ,actionButton("random", "Random Values")
+          ,actionButton("random", "Random Values", icon=icon("refresh"))
         ) # end sidebarPanel
         
         ,mainPanel(

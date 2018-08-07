@@ -118,7 +118,7 @@ batted_balls <- add_preds_from_probs(batted_balls, "rf", probs.rf)
 weights.df <- group_weights_by_year(batted)  # group linear weights (and counting stats) by player
 batting.df <- add_preds_to_yearly_data(weights.df)  # combine xStats and actual stats
 
-# Now batting.df is a dataframe with every player's actual stats and xStats, including expected rate stats
+# batting.df is a dataframe with every player's actual stats and xStats, including expected rate stats
 ```
 </div>
 
