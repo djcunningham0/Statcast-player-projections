@@ -161,7 +161,9 @@ marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
 # evaluate Marcel projections ---------------------------------------------
 
 summary.2017.wOBA <- create_eval_summary(eval.df.2017)
-summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
+summary.2017.OPS  <- create_eval_summary(eval.df.2017, stat="OPS")
+summary.2017.OBP  <- create_eval_summary(eval.df.2017, stat="OBP")
+summary.2017.SLG  <- create_eval_summary(eval.df.2017, stat="SLG")
 
 
 # projection system comparison --------------------------------------------
@@ -170,10 +172,19 @@ summary.2017.OPS <- create_eval_summary(eval.df.2017, stat="OPS")
 p <- plot_projection_summary(summary.2017.wOBA,
                              which=c("marcel", "steamer", "multinom", "rf"), 
                              names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
-                             plot.title="Relative Accuracy of\nProjections",
-                             subtitle=NULL); print(p)
+                             # plot.title="Relative Accuracy of\nProjections",
+                             # subtitle=NULL
+                             ); print(p)
 
 p <- plot_projection_summary(summary.2017.OPS,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
+
+p <- plot_projection_summary(summary.2017.OBP,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
+
+p <- plot_projection_summary(summary.2017.SLG,
                              which=c("marcel", "steamer", "multinom", "rf"), 
                              names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
 
