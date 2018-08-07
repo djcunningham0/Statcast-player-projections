@@ -1,0 +1,292 @@
+---
+title: Methodology
+subtitle: Statcast-Enhanced Projections from Random Forest Batted Ball Model
+output:
+  html_document:
+    css: js/styles.css
+    toc: TRUE
+    # toc_float: TRUE
+    theme: cosmo
+    highlight: haddock
+---
+
+<!-- this script add the buttons to hide code or output -->
+<!-- idea from https://stackoverflow.com/questions/37755037/how-to-add-code-folding-to-output-chunks-in-rmarkdown-html-documents -->
+<script src="js/hideOutput.js"></script>
+
+```{r include=FALSE}
+source("define_functions.R")
+```
+
+
+# Project Description {.tabset}
+
+I originally set out to identify lucky and unlucky MLB hitters by calculating how well I would expect them to perform based on their batted ball profiles. The project evolved into building complete hitting projections, and I've been really happy with the early results. Everything is based on the hypothesis that using raw data from Statcast rather than observed outcomes will result in more accurate projections and player evaluation. Read on for more details.
+
+See [my GitHub repository](https://github.com/djcunningham0/Statcast-player-projections) for all of the code related to this project. All functions used below are defined there. Please email me at [djcunningham0@gmail.com](mailto:djcunningham0@gmail.com?subject=Statcast player projections) with any feedback or questions.
+
+**Do you make your own player projections?** Please reach out! I'd love to see if my model can help improve the accuracy of other projection systems!
+
+**Here's a quick description of the different sections of this app:**
+
+## Batted Ball Predictions
+
+Predicted outcomes of batted balls from my random forest model. Details in the 'Statcast Random Forest Model' section below.
+
+Probably the most fun tab. Arguably the least useful.
+
+## Projections
+
+View full-season projections or download underlying data. New season projections become available after the completion of the current season. Details in the 'Full-Season Projections' section below.
+
+## Who's Been Lucky?
+
+View the luckiest and unluckiest hitters by a variety of metrics according to my random forest model.
+
+
+# Data Source
+
+I pulled all of my Statcast data from Baseball Savant with the help of Bill Petti's excellent [baseballr package](https://github.com/BillPetti/baseballr). My pull_statcast_data function (defined in update_data_files.R) is essentially a wrapper around baseballr::scrape_statcast_savant_batter_all to pull all Statcast batting data over a specified time frame.
+
+<div class="fold s o">
+```{r eval=FALSE}
+# For example, this is how I'd pull all Statcast data for 2015-2018
+pull_statcast_data(startYear=2015, endYear=2018, directory="<DIRECTORY>")
+
+# That saves two .rds files which can be read into R like this
+all_pitches  <- readRDS("<DIRECTORY>_all_pitches_by_batter_2015_2018.rds")  # every pitch
+batted_balls <- readRDS("<DIRECTORY>_batted_balls_2015_2018.rds")  # only batted balls
+
+# This function (from my 'define_functions.R' file) keeps and correctly formats the fields I use later
+batted_balls <- format_data_frame(batted_balls)
+```
+</div>
+
+Other data (e.g., players' actual statistics, linear weights, etc.) is scraped from FanGraphs.
+
+
+# Statcast Random Forest Model
+
+I built several statistical and machine learning models to use Statcast data to predict the outcome of a batted ball. That is, given the exit velocity, launch angle, and spray angle, the models predict the probabilities that the result will be an out, single, double, triple, or home run.
+
+The model that has worked best for me is a random forest model. Random forest seems to work well because it easily models nonlinear relationships (very important!) and tends not to overfit.
+
+The model that is currently powering my projections is based on five features for each batted ball:
+
+* Statcast exit velocity
+* Statcast launch angle
+* Statcast spray angle[^1]
+* Batter speed score (from [FanGraphs](https://www.fangraphs.com/library/offense/spd/))
+* Home team (to account for ballpark dimensions, park effects, etc.)
+
+<div class="fold s o">
+```{r eval=FALSE}
+# This is how I fit the model. The batted_ball_training_set would be a subset of all batted
+# balls from Statcast (I used a random sample of batted balls from 2015-2017).
+rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + home_team, 
+                   data=batted_ball_training_set)
+```
+</div>
+
+[^1]: Spray angle is not actually included in the data from Baseball Savant. I approximated spray angle using the hc_x and hc_y values and some trigonometry as described in [this post](https://www.fangraphs.com/tht/research-notebook-new-format-for-statcast-data-export-at-baseball-savant/).
+
+My original model only used the three Statcast inputs. I added speed score because the original model consistently undervalued faster players and adding speed score solved that problem. I added the home team feature because it improved prediction accuracy.
+
+I experimented with adding features for defensive shifts, but interestingly that had little effect on the results.
+
+## Other models
+
+I tried a few other models, such as multinomial logistic regression and k-nearest neighbors. Some of the code is included or commented out in my 'Statcast modeling.R' file.
+
+The multinomial logistic regression model (which I sometimes abbreviate MLR) is a nice starting point because it is a linear model, but it predictably does not do very well because the ground truth is clearly nonlinear. The k-NN model performs similarly (but slightly worse) to the random forest as you might expect.
+
+My gut tells me that it will be difficult to significantly improve upon the random forest model, the biggest reason being that the classes are not very separable. You can have three identically hit balls and one might be an out, one a single, and one a double. No model will be able to correctly predict those outcomes without a ton of added complexity (e.g., full fielder positioning, weather data, etc.).
+
+One model class I've considered is boosted trees (e.g., XGBoost). Those models typically outperform random forest but require much more tuning. Maybe someday I'll get around to it.
+
+# Expected Stats (xStats)
+
+I use the random forest model predictions to calculate xStats (e.g., x1B, xHR, xwOBA) for players over the course of a season. Each model prediction returns a probability vector for a single batted ball. Summing all of the probability vectors for a given player over the course of a season yields his expected number of singles, doubles, etc. 
+
+Most rate stats, such as OBP or SLG, rely on more than just balls in play. To calculate expected rate stats, I use a player's expected batted ball stats and actual non-batted ball stats (e.g., BBs). 
+
+<div class="fold s o">
+```{r eval=FALSE}
+# This is how I calculate xStats for all players (functions are defined in define_functions.R).
+# probs.rf is a dataframe of predictions from the random forest model
+batted_balls <- add_preds_from_probs(batted_balls, "rf", probs.rf)
+weights.df <- group_weights_by_year(batted)  # group linear weights (and counting stats) by player
+batting.df <- add_preds_to_yearly_data(weights.df)  # combine xStats and actual stats
+
+# Now batting.df is a dataframe with every player's actual stats and xStats, including expected rate stats
+```
+</div>
+
+
+## What about MLB's xwOBA? {.tabset}
+
+MLBAM produces a statistic called [xwOBA](http://m.mlb.com/glossary/statcast/expected-woba). The concept is pretty similar to what I'm doing with my xStats.
+
+So why do I think my method is better?
+
+First, it's more transparent. I don't know exactly how MLB calculates xwOBA, but I believe they construct bins of exit velocities and launch angles and look at the results of other batted balls in those bins. My model is easy to fit (and tweak) and does not require any arbitrary decisions such as choosing bin sizes. I also provide all xStats beyond just expected wOBA.
+
+Second, my model uses additional features. I don't believe MLB xwOBA include spray angle, and I'm nearly certain it does not include speed score or anything comparable. Those features improve the accuracy of my model.
+
+My results show that my random forest xwOBA is more descriptive and predictive than MLB's xwOBA.[^2]
+
+[^2]: Small sample size caveat: Statcast data has only been around since 2015.
+
+### Descriptive Comparison 
+
+The correlation of actual wOBA my random forest (RF) expected wOBA within the same season is much higher than the correlation of wOBA with xwOBA.[^3]
+
+[^3]: 2015-2017 seasons, players with at least 150 ABs.
+
+![](../presentations/images/descriptive_comparison.png)
+
+### Predictive Comparison
+
+The correlation of current season wOBA with (left to right) last season wOBA, last season MLB xwOBA, and last season RF expected wOBA.[^4] My random forest method has (marginally) higher correlation.
+
+[^4]: 2015-2017 seasons, players with at least 150 ABs in consecutive seasons. There's almost certainly some selection bias here so take these numbers with a grain of salt.
+
+![](../presentations/images/predictive_comparison.png)
+
+
+## Slow down -- what the heck is wOBA?
+
+If you need an intro or refresher on wOBA, FanGraphs has great posts on [wOBA](https://www.fangraphs.com/library/offense/woba/) and [linear weights](https://www.fangraphs.com/library/principles/linear-weights/), the building blocks for wOBA.
+
+I'm using wOBA for the basis of most of my evaluations. If you're conviced there's a better way, I'd love to discuss.
+
+
+# Full Season Projections
+
+## Marcel the Monkey
+
+My projections are based on the Marcel the Monkey Forecasting System, as [originally described by Tom Tango](http://www.tangotiger.net/archives/stud0346.shtml). I won't go into the exact calculations here, but it's a relatively simple way to create projections based on data from the previous three seasons. If you're interested, Tom Tango describes the details [here](http://www.tangotiger.net/archives/stud0346.shtml).
+
+If your more complex projection system can't beat Marcel, it's probably not any good. That's a surprisingly high bar -- Marcel tends to do quite well most years.
+
+## Statcast-Enhanced Marcel
+
+To create my projections, I exactly follow the Marcel procedure but **replace batted ball stats with my xStats**. That is, I take the past three seasons of data and replace 1Bs with x1Bs, HRs with xHRs, and so on, then compute then plug those into the Marcel framework.
+
+*Note:* Marcel projections require data from the prior three seasons. Statcast data has only been publicly available since 2015, so 2018 is the first season for which I can produce projections solely based on xStats (from the 2015-17 seasons). My projections for 2017 are based on xStats from 2015-16 and actual stats from 2014.
+
+<div class="fold s o">
+```{r eval=FALSE}
+# This is how I calculate standard and Statcast-enhanced Marcel projections for the 2017 season.
+eval.df.2017 <- get_marcel_eval_df(2017, pred_df=batting.df)
+```
+</div>
+
+# Evaluating the Projections {.tabset}
+
+My goal is to beat the standard Marcel player projections. I'm using the exact same framework with different underlying numbers, so it makes for an apples-to-apples comparison.
+
+There are several publicly available projection systems that consistently outperform Marcel (e.g., [Steamer](http://steamerprojections.com/blog/), ZiPS). I would not expect my projections to be better than these system since mine are based on such a simple framework. 
+
+That said, if you have your own projection system please [contact me](mailto:djcunningham0@gmail.com?subject=Statcast player projections)! I'd love to see what would happen if we plugged my xStats into your projection system.
+
+I'm evaluating the accuracy of a given projection system by taking a value representing player value (e.g., wOBA) and comparing players' actual values to their projected values. Specifically, I'm using three evaluation metrics:
+
+* (Pearson) Correlation coefficient
+* Mean absolute error (MAE)
+* Root-mean-square error (RMSE)
+
+Those are three very standard metrics in statistics. Do a quick Google search if you're interested in rigorous definitions are descriptions of why they're useful. Ideally, you want high correlation and low error.
+
+Below are plots describing the relative scores for standard Marcel and two versions of my Statcast-enhanced Marcel projections for the **2017**[^5] season (random forest and multinomial logistic regression models). I also include Steamer for a comparison to one of the best publicly available projection systems. The values are set to a 0-1 scale with standard Marcel always having a value of 0 and the highest-scoring projection in each category having a value of 1. I'm including results for projected wOBA, OPS, OBP, and SLG.
+
+[^5]: Players with at least 150 ABs in the 2017 season.
+
+<div class="fold s o">
+```{r eval=FALSE}
+# Here's how I evaluated my projections for the 2017 season.
+# Again, my functions are defined in define_functions.R
+
+library(readr)
+library(dplyr)
+
+# read in Steamer projections downloaded from http://steamerprojections.com/blog/, 
+# then combine into data frame with Marcel and Statcast-enhanced Marcel projections
+steamer.2017 <- read_csv("./projections/Steamer projections 2017.csv", col_types=cols()) %>% 
+  rename("X1B" = "1B", "X2B" = "2B", "X3B" = "3B",
+         "key_mlbam" = "mlbamid")
+
+eval.df.2017 <- add_steamer_to_eval_df(eval.df.2017, steamer.2017)
+
+# compute correlation, MAE, and RMSE for all projection systems for each of wOBA, OPS, OBP, SLG
+summary.2017.wOBA <- create_eval_summary(eval.df.2017, stat="wOBA")
+summary.2017.OPS  <- create_eval_summary(eval.df.2017, stat="OPS")
+summary.2017.OBP  <- create_eval_summary(eval.df.2017, stat="OBP")
+summary.2017.SLG  <- create_eval_summary(eval.df.2017, stat="SLG")
+
+# make a summary plot showing the relative score of each projection system in each metric
+plot_projection_summary(summary.2017.wOBA,
+                        which=c("marcel", "steamer", "multinom", "rf"), 
+                        names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"))
+
+plot_projection_summary(summary.2017.OPS,
+                        which=c("marcel", "steamer", "multinom", "rf"), 
+                        names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"))
+
+plot_projection_summary(summary.2017.OBP,
+                        which=c("marcel", "steamer", "multinom", "rf"), 
+                        names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"))
+
+plot_projection_summary(summary.2017.SLG,
+                        which=c("marcel", "steamer", "multinom", "rf"), 
+                        names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"))
+```
+</div>
+
+## wOBA
+
+I consider wOBA to be the most important value to predict out of these four.
+
+The random forest model falls nearly halfway between standard Marcel and Steamer in all three metrics. That seems like a considerable improvement over standard Marcel.
+
+The multinomial logistic regression model performs very poorly in the error metrics.
+
+![](../presentations/images/wOBA_eval.png)
+
+## OPS
+
+OPS is a good alternative to wOBA, and probably the best single-number value that you can easily calculate from a box score.
+
+The random forest model does a great job of projecting OPS, approaching the accuracy of Steamer on both of the error metrics.
+
+Multinomial logistic regression remains terrible.
+
+![](../presentations/images/OPS_eval.png)
+
+## OBP
+
+Thr random forest model does not show much improvement over standard Marcel when projecting on-base percentage. This is likely because OBP is heavily reliant on walks, which are out of scope for the batted balls models.
+
+![](../presentations/images/OBP_eval.png)
+
+## SLG
+
+The random forest model does quite well at projecting slugging percentage. Unlike OBP, SLG is only affected by batted balls (except for strikeouts), so the batted ball models should have a strong effect.
+
+![](../presentations/images/SLG_eval.png)
+
+
+# Running This App
+
+One of the cool things about my batted ball model is that you can evaluate its predictions at any point during the season to identify over- and underachieving players. However, that means new Statcast data has to be pulled daily during the season to have up-to-date predictions, which poses a few challenges for an R Shiny web app:
+
+* The Statcast data pulls take a long time, so load time would be much too slow to run them in the app
+* The data files are rather large and computations for my projections are too memory-intensive for the free version of shinyapps.io (max size of 1 GB). 
+
+My solution was to batch and automate as many of the tasks as possible. The shell script run_updates.sh calls two R scripts (update_data_files.R and update_prediction_data.R) that update raw data and prediction data files locally on my computer, then copies that data to a Dropbox folder. The shell script is scheduled to run locally every day. 
+
+The R Shiny app reads the prediction data files, which are processed to only include the data necessary for the app, from Dropbox. The result is a fast in-app experience (after the initial loading from Dropbox) and a fully automated process that keeps the data up-to-date.
+
+Here's a simple schematic of the data pipeline:
+
+![](../presentations/images/data_pipeline.png)

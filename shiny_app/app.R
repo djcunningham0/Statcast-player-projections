@@ -156,11 +156,14 @@ ui <- dashboardPage(
   
   ,dashboardSidebar(
     sidebarMenu(
-      menuItem("Batted Ball Predictions", tabName="batted", icon=icon("baseball-ball"))
+      id="tabs"
+      ,menuItem("Batted Ball Predictions", tabName="batted", icon=icon("baseball-ball"))
       ,menuItem("Projections", tabName="projections", icon=icon("database"))
       ,menuItem("Who's Been Lucky?", tabName="lucky", icon=icon("baseball-ball"))
-      ,menuItem("More Coming Soon!", tabName="more")
+      ,menuItem("Methodology", tabName="methodology")
     )
+    ,textOutput("res")
+    ,textOutput("test")
   )
   
   ,dashboardBody(
@@ -292,11 +295,10 @@ ui <- dashboardPage(
       ) # end tabItem - lucky
       
       ,tabItem(
-        tabName="more"
-        ,p("I'll be adding more content and functionality through the end of the 2018 season.")
-        ,p("In the meantime, view the source code at", github_url, 
-           "or email me at", email_url, "with comments or questions.")
-      ) # end tabItem - more
+        tabName="methodology"
+        # this HTML is created from methodology.Rmd in the main folder
+        ,includeHTML("methodology.html")
+      ) # end tabItem - methodology
     ) # end tabItems
   ) # end dashboardBody
 ) # end dashboardPage
