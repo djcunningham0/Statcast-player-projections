@@ -157,10 +157,10 @@ ui <- dashboardPage(
   ,dashboardSidebar(
     sidebarMenu(
       id="tabs"
-      ,menuItem("Batted Ball Predictions", tabName="batted", icon=icon("baseball-ball"))
+      ,menuItem("Batted Ball Predictions", tabName="batted", icon=icon("calculator"))
       ,menuItem("Projections", tabName="projections", icon=icon("database"))
-      ,menuItem("Who's Been Lucky?", tabName="lucky", icon=icon("baseball-ball"))
-      ,menuItem("Methodology", tabName="methodology")
+      ,menuItem("Who's Been Lucky?", tabName="lucky", icon=icon("list"))
+      ,menuItem("Methodology", tabName="methodology", icon=icon("cogs"))
     )
     ,textOutput("res")
     ,textOutput("test")
