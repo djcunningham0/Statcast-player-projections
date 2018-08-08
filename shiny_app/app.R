@@ -162,8 +162,6 @@ ui <- dashboardPage(
       ,menuItem("Who's Been Lucky?", tabName="lucky", icon=icon("list"))
       ,menuItem("Methodology", tabName="methodology", icon=icon("cogs"))
     )
-    ,textOutput("res")
-    ,textOutput("test")
   )
   
   ,dashboardBody(
@@ -230,8 +228,6 @@ ui <- dashboardPage(
       ,tabItem(
         tabName="projections"
         ,h2("Full Season Projections")
-        # ,p("More coming soon, but for now view or download the projections for the 2018 season",
-        #    "and explore hit probabilities for different batted balls.")
         
         ,fluidRow(
           column(
@@ -259,6 +255,9 @@ ui <- dashboardPage(
         ,downloadButton("download_xstats", "Download xStats (all seasons)")
         
         ,fluidRow(width=4,column(width=4, style='padding:5px'))
+        
+        ,actionLink("details", "Show download details")
+        ,htmlOutput("details", style="max-width: 600px;")
         
         ,htmlOutput("note_2017")
         ,div("filler", style="opacity:0.0;")
@@ -429,6 +428,30 @@ server <- function(input, output, session) {
       write_csv(lucky_df, path=file)
     }
   )
+  
+  observeEvent(
+    input$details,
+    {
+      if (input$details %% 2 == 0) {
+        vals$details <- NULL
+        updateActionButton(session, "details", label="Show download details")
+      } else {
+        vals$details <- paste0('<b>Download projections (all seasons):</b>',
+                               ' A CSV file with full season projections from standard Marcel',
+                               ' and my Statcast-enhanced Marcel projections based on a random',
+                               ' forest model. Fields ending in "_rf" are Statcast-enhanced',
+                               ' projections. Other fields are standard Marcel projections.</br></br>',
+                               '<b>Download xStats (all seasons):</b>',
+                               ' A CSV file with actual stats (from Fangraphs) and expected',
+                               ' stats from the random forest model. Fields beginning',
+                               ' with "rf_" are expected stats.')
+        
+        updateActionButton(session, "details", label="Hide download details")
+      }
+    }
+  )
+  
+  output$details <- renderText(vals$details)
   
   observeEvent(
     list(input$season, input$method),

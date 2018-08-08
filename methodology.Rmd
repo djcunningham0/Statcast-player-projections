@@ -158,14 +158,14 @@ The correlation of current season wOBA with (left to right) last season wOBA, la
 
 If you need an intro or refresher on wOBA, FanGraphs has great posts on [wOBA](https://www.fangraphs.com/library/offense/woba/) and [linear weights](https://www.fangraphs.com/library/principles/linear-weights/), the building blocks for wOBA.
 
-I'm using wOBA for the basis of most of my evaluations. If you're conviced there's a better way, I'd love to discuss.
+It's a stat you should know if you have any interest in baseball. It does a great job representing offensive value with a single number and it has a really nice derivation. I'm using wOBA for the basis of most of my evaluations.
 
 
 # Full Season Projections
 
 ## Marcel the Monkey
 
-My projections are based on the Marcel the Monkey Forecasting System, as [originally described by Tom Tango](http://www.tangotiger.net/archives/stud0346.shtml). I won't go into the exact calculations here, but it's a relatively simple way to create projections based on data from the previous three seasons. If you're interested, Tom Tango describes the details [here](http://www.tangotiger.net/archives/stud0346.shtml).
+My projections are based on the Marcel the Monkey Forecasting System, as [originally described by Tom Tango](http://www.tangotiger.net/archives/stud0346.shtml). I won't go into the exact calculations here, but it's a relatively simple way to create projections based on data from the previous three seasons. 
 
 If your more complex projection system can't beat Marcel, it's probably not any good. That's a surprisingly high bar -- Marcel tends to do quite well most years.
 
@@ -184,7 +184,7 @@ eval.df.2017 <- get_marcel_eval_df(2017, pred_df=batting.df)
 
 # Evaluating the Projections {.tabset}
 
-My goal is to beat the standard Marcel player projections. I'm using the exact same framework with different underlying numbers, so it makes for an apples-to-apples comparison.
+My goal is to beat the standard Marcel player projections. I'm using the exact same framework with different underlying numbers, so it makes for an apples-to-apples comparison. If my hypothesis is correct (i.e., the expected stats from my model are more predictive than actual stats), then my Statcast-enhanced Marcels should come out on top.
 
 There are several publicly available projection systems that consistently outperform Marcel (e.g., [Steamer](http://steamerprojections.com/blog/), ZiPS). I would not expect my projections to be better than these system since mine are based on such a simple framework. 
 
