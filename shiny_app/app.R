@@ -8,6 +8,7 @@ library(lattice)
 library(NISTunits)
 library(lubridate)
 library(GAlogger)
+library(grImport)
 
 
 
@@ -53,56 +54,86 @@ strip_suffixes <- function(string) {
     str_replace("_rf", "")
 }
 
-# this is mostly copied from openWAR::panel.baseball, but that package caused errors when publishing the app
-my.panel.baseball <- function () 
-{
-  bgcol <-  "darkgray"
-  panel.segments(0, 0, -400, 400, col=bgcol)
-  panel.segments(0, 0, 400, 400, col=bgcol)
-  bw <-  2
+#' draw a given ballpark with an arrow starting from home plate
+#' XML files are in ./ballpark_xml_files/ and are named <team>.xml
+#' @param team abbreviation of the team (string)
+#' @param r radius of the arrow
+#' @param theta angle of the arrow in degrees (0 is straight up the middle)
+draw_field <- function(team, r, theta, path="./ballpark_xml_files/") {
+  require(grImport)
+  require(NISTunits)
   
-  base1.x = 90 * cos(pi/4)
-  base1.y = 90 * sin(pi/4)
-  panel.polygon(c(base1.x, base1.x - bw, base1.x - 2 * bw, base1.x - bw), 
-                c(base1.y, base1.y - bw, base1.y, base1.y + bw), 
-                col=bgcol)
+  field <- grImport::readPicture(paste0(path, team, ".xml"))
+  n <- field@summary@numPaths
   
-  base2.x <- 0
-  base2.y <- sqrt(90^2 + 90^2)
-  panel.polygon(c(-bw, base2.x, bw, base2.x), 
-                c(base2.y, base2.y - bw, base2.y, base2.y + bw), 
-                col=bgcol)
-  
-  base3.x <- 90 * cos(3 * pi/4)
-  base3.y <- base1.y
-  panel.polygon(c(base3.x, base3.x + bw, base3.x + 2 * bw, base3.x + bw), 
-                c(base3.y, base3.y - bw, base3.y, base3.y + bw), 
-                col = bgcol)
-  
-  x <- NULL
-  rm(x)
-  
-  mound.y <- 60.5
-  panel.curve(mound.y + sqrt(95^2 - x^2), from=base3.x - 26, to=base1.x + 26, col=bgcol)
-  panel.rect(-bw, mound.y - bw/2, bw, mound.y + bw/2, col=bgcol)
-  panel.polygon(c(0, -8.5/12, -8.5/12, 8.5/12, 8.5/12), 
-                c(0, 8.5/12, 17/12, 17/12, 8.5/12), col=bgcol)
-  
-  distances <- seq(from=200, to=500, by=100)
-  for (d in distances) {
-    panel.curve(sqrt(d^2 - x^2), 
-                from=d * cos(3 * pi/4), 
-                to=d * cos(pi/4), 
-                col=bgcol)
+  # select the paths that should be drawn (no compass or numbers)
+  if (team == "TOR") {
+    # the turf field is a bit different
+    include <- c(6:17, 23:34)
+  } else {
+    include <- c(6:8, (n-11):n)
   }
   
-  # draw infield details (I added this)
-  panel.segments(base1.x, base1.y, base2.x, base2.y, col=bgcol)
-  panel.segments(base2.x, base2.y, base3.x, base3.y, col=bgcol)
+  coords <- get_field_min_max(field, n, include)
   
-  r <- 10
-  panel.curve(sqrt(r^2 - x^2) + mound.y, from=-r, to=r, col=bgcol)
-  panel.curve(-sqrt(r^2 - x^2) + mound.y, from=-r, to=r, col=bgcol)
+  plate.summary <- field[n-1]@summary
+  plate.x <- mean(plate.summary@xscale)
+  plate.y <- min(plate.summary@yscale)
+  
+  r.scale <- (coords$ymax - coords$ymin)/180
+  r <- r * r.scale
+  theta <- NISTdegTOradian(theta)
+  
+  xyplot(c(coords$ymin, coords$ymax) ~ c(coords$xmin, coords$xmax),
+         panel=function() {
+           grImport::grid.picture(field[include], distort=TRUE)
+           larrows(x0=plate.x, y0=plate.y, 
+                   x1=plate.x + r*sin(theta), 
+                   y1=plate.y + r*cos(theta), 
+                   col='blue',
+                   length=.15, lwd=3)
+         },
+         xlab="", ylab="", scales=list(draw=FALSE))
+}
+
+#' get the min/max x and y coordinates for the parts of the XML file that will be drawn
+get_field_min_max <- function(field, n=NULL, include=NULL) {
+  if (is.null(n)) {
+    n <- field@summary@numPaths
+  }
+  if (is.null(include)) {
+    # select the paths that should be drawn (no compass or numbers)
+    if (team == "TOR") {
+      # the turf field is a bit different
+      include <- c(6:17, 23:34)
+    } else {
+      include <- c(6:8, (n-11):n)
+    }
+  }
+  
+  xmin <- Inf
+  xmax <- -Inf
+  ymin <- Inf
+  ymax <- -Inf
+  for (i in include) {
+    summary <- field[i]@summary
+    x <- summary@xscale
+    y <- summary@yscale
+    xmin.tmp <- min(x)
+    xmax.tmp <- max(x)
+    ymin.tmp <- min(y)
+    ymax.tmp <- max(y)
+    
+    if (xmin.tmp < xmin) {xmin <- xmin.tmp}
+    if (xmax.tmp > xmax) {xmax <- xmax.tmp}
+    if (ymin.tmp < ymin) {ymin <- ymin.tmp}
+    if (ymax.tmp > ymax) {ymax <- ymax.tmp}
+  }
+  
+  return(list(xmin=xmin,
+              xmax=xmax,
+              ymin=ymin,
+              ymax=ymax))
 }
 
 
@@ -113,7 +144,7 @@ count_cols <- c("xPA", "xAB", "xH", "xX1B", "xX2B", "xX3B", "xHR", "xR", "xRBI",
 rate_cols  <- c("xBA", "xOBP", "xSLG", "xOPS", "xwOBA", "xBA_rf", "xOBP_rf", "xSLG_rf",
                 "xOPS_rf", "xwOBA_rf")
 
-marcel_df <- dropbox_readRDS("/statcast_modeling_data/prediction_data/marcel_projections.rds") %>% 
+marcel_df <- dropbox_readRDS("/statcast_modeling_data/prediction_data/marcel_projections.rds") %>%
   mutate_at(count_cols, round, 1) %>% 
   mutate_at(rate_cols, round, 3)
 
@@ -321,15 +352,7 @@ server <- function(input, output, session) {
   
   ## visualize the spray angle
   output$spray_chart <- renderPlot({
-    r <- input$exit_velocity * 3  # radius for the arrow
-    theta <- NISTdegTOradian(input$spray_angle)
-    xyplot(c(-25, 525) ~ c(-325, 325),
-           panel=function() {
-             my.panel.baseball()
-             larrows(x0=0, y0=0, x1=r*sin(theta), y1=r*cos(theta), col='blue',
-                     length=.15, lwd=2)
-           },
-           xlab="", ylab="", scales=list(draw=FALSE))
+    draw_field(team=input$ballpark, r=input$exit_velocity, theta=input$spray_angle)
   })
   
   ## visualize the launch angle
