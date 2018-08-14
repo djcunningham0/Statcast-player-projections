@@ -199,7 +199,6 @@ ui <- dashboardPage(
     
     tabItems(
       
-      
       # begin batted balls tab
       tabItem(
         tabName="batted"
@@ -239,17 +238,17 @@ ui <- dashboardPage(
           fluidRow(
             column(
               width=12
-              ,div(tableOutput("probs"), style="font-size:120%")
+              ,div(tableOutput("probs"), style="font-size:120%; overflow-x: scroll")
               ,align="center"
             )
           )
           
           ,box(title="Spray Angle",
-               collapsible=FALSE,
+               collapsible=TRUE,
                plotOutput("spray_chart")
           )
           ,box(title="Launch Angle",
-               collapsible=FALSE,
+               collapsible=TRUE,
                plotOutput("launch_velo")
           )
         ) # end mainPanel - batted balls
@@ -292,7 +291,7 @@ ui <- dashboardPage(
         
         ,htmlOutput("note_2017")
         ,div("filler", style="opacity:0.0;")
-        ,dataTableOutput("datatable")
+        ,div(dataTableOutput("projection_table"), style="overflow-x: scroll")
       ) # end tabItem - full season projections
       
       # begin lucky/unlucky tab
@@ -318,15 +317,16 @@ ui <- dashboardPage(
         ,htmlOutput("date_message")
         
         ,h2("Luckiest Batters")
-        ,dataTableOutput("lucky_table")
+        ,div(dataTableOutput("lucky_table"), style="overflow-x: scroll")
         
         ,h2("Unluckiest Batters")
-        ,dataTableOutput("unlucky_table")
+        ,div(dataTableOutput("unlucky_table"), style="overflow-x: scroll")
       ) # end tabItem - lucky
       
       ,tabItem(
         tabName="methodology"
         # this HTML is created from methodology.Rmd in the main folder
+        # you need to comment out the first <script> line in the rendered HTML file for it to work properly in the app
         ,includeHTML("methodology.html")
       ) # end tabItem - methodology
     ) # end tabItems
@@ -417,7 +417,7 @@ server <- function(input, output, session) {
     }
   )
   
-  output$datatable <- renderDataTable({
+  output$projection_table <- renderDataTable({
     ga_collect_pageview(page="/projections", title="Full Season Projections")
     
     out_df <- marcel_df %>%
