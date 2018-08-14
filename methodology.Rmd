@@ -15,7 +15,7 @@ output:
 <script src="js/hideOutput.js"></script>
 
 ```{r include=FALSE}
-source("define_functions.R")
+# source("define_functions.R")
 ```
 
 
@@ -83,6 +83,7 @@ The model that is currently powering my projections is based on five features fo
 ```{r eval=FALSE}
 # This is how I fit the model. The batted_ball_training_set would be a subset of all batted
 # balls from Statcast (I used a random sample of batted balls from 2015-2017).
+library(randomForest)
 rf <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + home_team, 
                    data=batted_ball_training_set)
 ```
