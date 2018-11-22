@@ -655,13 +655,28 @@ create_eval_summary <- function(eval_df, stat="wOBA") {
   cor.vals <- rep(0, n)
   mae.vals <- rep(0, n)
   rmse.vals <- rep(0, n)
+  na.vals <- c()
   methods <- sapply(strsplit(colnames(estimates),"_"),'[',2)
+  
+  # if there are any NA values (e.g., in Steamer projections), we'll need to exclude those values
+  # from baselines and estimates when computing correlations and errors
+  na.vals <- rep(0,n)
+  for (i in 1:n) {
+    na.vals[i] <- ifelse(length(which.na(estimates[,i])) == 0, 0, which.na(estimates[,i]))
+  }
   
   # get correlation, MAE, and RMSE for each projection method
   for (i in 1:n) {
-    cor.vals[i] <- cor(baseline, estimates[,i])
-    mae.vals[i] <- mae(baseline, estimates[,i])
-    rmse.vals[i] <- rmse(baseline, estimates[,i])
+    if (na.vals[i] == 0) {
+      baseline.vals <- baseline
+      estimate.vals <- estimates[,i]
+    } else {
+      baseline.vals <- baseline[-na.vals[i]]
+      estimate.vals <- estimates[-na.vals[i], i]
+    }
+    cor.vals[i] <- cor(baseline.vals, estimate.vals)
+    mae.vals[i] <- mae(baseline.vals, estimate.vals)
+    rmse.vals[i] <- rmse(baseline.vals, estimate.vals)
   }
   
   summary.df <- data.frame(method=methods, cor=cor.vals, mae=mae.vals, rmse=rmse.vals)
@@ -711,26 +726,32 @@ reshape_eval_summary <- function(summary_df) {
 #' 
 #' @return a ggplot object
 plot_projection_summary <- function(summary_df, which=summary_df$method, names=NULL,
-                                    scale=TRUE, metrics=c("cor", "mae", "rmse"), 
-                                    point_size=3, center_title=TRUE,
+                                    scale=TRUE, marcel_at_zero=TRUE, metrics=c("cor", "mae", "rmse"), 
+                                    point_size=3, point_alpha=1, center_title=TRUE,
                                     title_size=16, text_size=12,
                                     plot.title="Relative Accuracy of Projections",
                                     subtitle=paste0("(", attr(summary_df, "stat"), ")")) {
   require(dplyr)
   require(forcats)
+  require(ggplot2)
   
   # add subtitle if specified
   if (!is.null(subtitle) && !(subtitle %in% c("", "()"))) {
     plot.title <- paste0(plot.title, "\n", subtitle)
   }
   
+  # only keep the methods that we want to plot
+  summary_df <- summary_df %>% 
+    filter(method %in% which)
+  
+  # scale values between 0 and 1 if specified
   if (scale) {
-    summary_df <- scale_eval_summary(summary_df)
+    summary_df <- scale_eval_summary(summary_df, marcel_at_zero=marcel_at_zero)
   }
   
-  # only keep the methods that we want to plot
+  # reshape and only keep chosen metrics
   summary_df <- reshape_eval_summary(summary_df) %>% 
-    filter(method %in% which, metric %in% metrics) %>% 
+    filter(metric %in% metrics) %>% 
     mutate_at("method", factor) %>% 
     mutate_at("metric", factor)
   
@@ -748,7 +769,7 @@ plot_projection_summary <- function(summary_df, which=summary_df$method, names=N
   }
   
   p <- (ggplot(summary_df, aes(x=metric, y=value, color=method))
-        + geom_point(size=point_size)
+        + geom_point(size=point_size, alpha=point_alpha)
         + labs(x="", y="scaled value", title=plot.title)
         + theme(legend.title=element_blank())
         + theme(legend.key.size=unit(text_size/2,'mm'))
@@ -801,7 +822,7 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
                                center_title=FALSE, title_size=NULL, text_size=NULL,
                                point_size=NULL, point_alpha=0.75,
                                text.cols=c("Name","Season"),
-                               colorBarTitle=color.col) {
+                               colorBarTitle=color.col, border=FALSE) {
   require(ggplot2)
   
   text.format <- theme()
@@ -854,6 +875,10 @@ create_scatterplot <- function(data, x.col, y.col, color.col=NULL, xlab=substitu
     p <- p + geom_abline(slope=1, intercept=0, color='red', lty=2)
   }
   
+  if (border == TRUE) {
+    p <- p + theme(panel.border=element_rect(colour="black", fill=NA, size=1))
+  }
+  
   return(p)
 }
 
@@ -896,4 +921,47 @@ fit_knn_model <- function(df, k, trainSize, seed=NULL, type="classification") {
                     preProcess=c("scale","center"))
   }
   return(knnmod)
+}
+
+#' Calculate F1 score to measure quality of classification model (works with multiclass)
+#' (from https://stackoverflow.com/questions/8499361/easy-way-of-counting-precision-recall-and-f1-score-in-r)
+#' 
+#' @param predicted vector of predicted classes
+#' @param expected vector of true labels
+#' @param positive.class value for the "positive" class (only used for binary classification)
+#' 
+f1_score <- function(predicted, expected, positive.class="1") {
+  predicted <- factor(as.character(predicted), levels=unique(as.character(expected)))
+  expected  <- as.factor(expected)
+  cm = as.matrix(table(expected, predicted))
+  
+  precision <- diag(cm) / colSums(cm)
+  recall <- diag(cm) / rowSums(cm)
+  f1 <-  ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+  
+  #Assuming that F1 is zero when it's not possible compute it
+  f1[is.na(f1)] <- 0
+  
+  #Binary F1 or Multi-class macro-averaged F1
+  overall.f1 <- ifelse(nlevels(expected) == 2, f1[positive.class], mean(f1))
+  
+  return(list(precision=precision, recall=recall, f1=overall.f1, all_f1=f1))
+}
+
+
+#' 
+confusion_percentages <- function(mx, mult100=FALSE, digits=NULL) {
+  perc_mx <- matrix(nrow=nrow(mx), ncol=ncol(mx))
+  col.sums <- colSums(mx)
+  for (col in 1:ncol(mx)) {
+    perc_mx[,col] <- mx[,col] / col.sums[col]
+  }
+  
+  colnames(perc_mx) <- colnames(mx)
+  rownames(perc_mx) <- rownames(mx)
+  
+  if (mult100 == TRUE) { perc_mx <- perc_mx * 100 }
+  if (!is.null(digits)) { perc_mx <- round(perc_mx, digits) }
+  
+  return(perc_mx)
 }
