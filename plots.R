@@ -13,9 +13,8 @@ print(p.lm)
 # (make sure the models are correlated with wOBA)
 p <- create_scatterplot(data=sub.oneyear, x.col="rf_wOBA", y.col="wOBA",
                         xlab="RF wOBA prediction",plotTitle="wOBA vs. RF prediction",
-                        center_title=TRUE, point_alpha=0.7)
-print(p)
-ggplotly(p)
+                        center_title=TRUE, point_alpha=0.7); print(p)
+# ggplotly(p)
 
 p3 <- create_scatterplot(data=sub.oneyear,x.col="knn_wOBA",y.col="wOBA",
                         xlab="kNN wOBA prediction",plotTitle="wOBA vs. kNN prediction")
@@ -47,6 +46,8 @@ print(p)
 p <- create_scatterplot(data=sub.oneyear,x.col="mlbx_wOBA",y.col="wOBA",color.col="Spd")
 print(p)
 
+
+sub.oneyear$rf.simple_resid <- sub.oneyear$rf.simple_wOBA - sub.oneyear$wOBA
 
 # check wOBA correlation between years -----------------------------------------
 
@@ -178,3 +179,80 @@ grid.arrange(p1,p2,ncol=2)
 
 
 
+# for MS paper ------------------------------------------------------------
+
+# first four plots for correlation with wOBA
+p1 <- create_scatterplot(data=sub.oneyear, x.col="multinom_wOBA", y.col="wOBA",
+                         xlab="Multinomial wOBA prediction",plotTitle="wOBA vs. multinomial prediction",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p1)
+
+p2 <- create_scatterplot(data=sub.oneyear, x.col="knn_wOBA", y.col="wOBA",
+                         xlab="kNN wOBA prediction",plotTitle="wOBA vs. kNN prediction",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p2)
+
+p3 <- create_scatterplot(data=sub.oneyear, x.col="rf.simple_wOBA", y.col="wOBA",
+                         xlab="RF wOBA prediction",plotTitle="wOBA vs. RF prediction",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p3)
+
+p4 <- create_scatterplot(data=sub.oneyear, x.col="mlbx_wOBA", y.col="wOBA",
+                         xlab="MLB xwOBA prediction",plotTitle="wOBA vs. MLB xwOBA",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p4)
+
+ggsave(plot=p1, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/multinom_vs_woba.png")
+ggsave(plot=p2, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/knn_vs_woba.png")
+ggsave(plot=p3, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/rf_simple_vs_woba.png")
+ggsave(plot=p4, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/xwoba_vs_woba.png")
+
+# rf model colored by speed score
+p5 <- create_scatterplot(data=sub.oneyear, x.col="rf.simple_wOBA", y.col="wOBA", color.col="Spd",
+                         xlab="RF wOBA prediction",plotTitle="wOBA vs. RF prediction",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p5)
+
+sub.oneyear <- sub.oneyear %>% 
+  mutate(rf.simple_resid = rf.simple_wOBA - wOBA)
+p6 <- (create_scatterplot(data=sub.oneyear, x.col="Spd", y.col="rf.simple_resid",
+                         xlab="Speed score", ylab="Random forest wOBA residual", 
+                         plotTitle="Random forest wOBA residuals vs. batter speed score",
+                         center_title=TRUE, point_alpha=0.7,
+                         title_size=12, text_size=10, point_size=1,
+                         include_y_equal_x=FALSE)
+       + geom_hline(yintercept=0, lty=2, col='red')); print(p6)
+
+ggsave(plot=p5, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/rf_speed.png")
+ggsave(plot=p6, width=3.75, height=2.5, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/rf_speed_residuals.png")
+
+# correlation plot of the final model
+p7 <- create_scatterplot(data=sub.oneyear, x.col="rf_wOBA", y.col="wOBA",
+                         xlab="RF wOBA prediction",plotTitle="wOBA vs. RF prediction",
+                         center_title=TRUE, point_alpha=0.5,
+                         title_size=12, text_size=10, point_size=1); print(p7)
+
+ggsave(plot=p7, width=4.5, height=3, units="in", 
+       filename="~/Dropbox/UChicago thesis/figures/rf_final_vs_woba.png")
+
+# projection accuracy
+p <- plot_projection_summary(summary.full.wOBA,
+                             which=c("marcel", "steamer", "multinom", "rf", "knn"),
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel", "k-NN"),
+                             # which=c("marcel", "steamer", full.prefixes),
+                             # plot.title="Relative Accuracy of\nProjections",
+                             subtitle=("(2017-18 wOBA)"),
+                             point_size=2,
+                             text_size=10,
+                             title_size=12,
+                             marcel_at_zero=TRUE
+); print(p)
+
+ggsave(plot=p, width=4.5, height=3, units="in",
+       filename="~/Dropbox/UChicago thesis/figures/projection_eval.png")

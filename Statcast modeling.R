@@ -55,6 +55,16 @@ batted <- add_preds_from_probs(batted, "rf", probs.rf)
 # Note: I tried adding defensive shifts, but it didn't make much difference (actually slightly worse)
 # rf.shift <- randomForest(class ~ launch_speed + launch_angle + spray_angle + Spd + shift, data=train)
 
+rf.old <- readRDS("./models/rf.old.rds")
+probs.rf.old <- predict(rf.old, newdata=batted, type="prob")
+batted <- add_preds_from_probs(batted, "rf.old", probs.rf.old)
+
+# rf.simple <- randomForest(class ~ launch_speed + launch_angle + spray_angle, data=train)
+# saveRDS(rf.simple, "./models/rf.simple.rds")
+rf.simple <- readRDS("./models/rf_simple.rds")
+probs.rf.simple <- predict(rf.simple, newdata=batted, type="prob")
+batted <- add_preds_from_probs(batted, "rf.simple", probs.rf.simple)
+
 
 # fit kNN model -----------------------------------------------------------
 
@@ -62,12 +72,12 @@ batted <- add_preds_from_probs(batted, "rf", probs.rf)
 # library(caret)
 
 # tune k with 'knn cross validation.R'
-# k=50 works well
+# k=60 works well
 
 # here's how the model was trained:
 # currently fitting model on half the data
 # could fit on all data, but would need to re-tune k and it won't make much difference
-# knnmod <- fit_knn_model(batted, k=50, trainSize=0.5, seed=1)
+# knnmod <- fit_knn_model(batted, k=60, trainSize=0.5, seed=1)
 
 knnmod <- readRDS("./models/knn.rds")
 probs.knn <- predict(knnmod,newdata=batted,type="prob")
@@ -86,14 +96,23 @@ print("Done fitting models.")
 print("Building confusion matrix...")
 preds.multinom <- predict(mod.multinom, newdata=batted)
 preds.rf <- predict(rf, newdata=batted)
+preds.knn <- predict(knnmod, newdata=batted)
+preds.rf.old <- predict(rf.old, newdata=batted)
+preds.rf.simple <- predict(rf.simple, newdata=batted)
 
 order <- c("out","single","double","triple","home_run")
 batted$class <- factor(batted$class, levels=order)
 preds.multinom <- factor(preds.multinom, levels=order)
 preds.rf <- factor(preds.rf, levels=order)
+preds.knn <- factor(preds.knn, levels=order)
+preds.rf.old <- factor(preds.rf.old, levels=order)
+preds.rf.simple <- factor(preds.rf.simple, levels=order)
 
 mx.multinom <- caret::confusionMatrix(preds.multinom, batted$class)
 mx.rf <- caret::confusionMatrix(preds.rf, batted$class)
+mx.knn <- caret::confusionMatrix(preds.knn, batted$class)
+mx.rf.old <- caret::confusionMatrix(preds.rf.old, batted$class)
+mx.rf.simple <- caret::confusionMatrix(preds.rf.simple, batted$class)
 
 
 # group linear weights by player ------------------------------------------
@@ -111,7 +130,7 @@ weights.df <- group_weights_by_year(batted)
 batting.df <- add_preds_to_yearly_data(weights.df)
 # need to do the same for monthly data if I'm going to do month-to-month correlations
 
-AB_cutoff <- 150
+AB_cutoff <- 100
 sub.oneyear <- batting.df %>% 
   filter(AB >= AB_cutoff)
 
@@ -125,7 +144,12 @@ sub.lag <- batting_lagged %>%
 print("Creating Marcel projections...")
 
 # 2018 projections
-eval.df.2018 <- get_marcel_eval_df(2018, lw_years=2015:2017, pred_df=batting.df, include_true_stats=FALSE)
+# eval.df.2018 <- get_marcel_eval_df(2018, lw_years=2015:2017, pred_df=batting.df, include_true_stats=FALSE)
+eval.df.2018 <- get_marcel_eval_df(2018, lw_years=2016:2018, pred_df=batting.df, AB_cutoff=AB_cutoff)
+steamer.2018 <- read_csv("./projections/Steamer projections 2018.csv", col_types=cols()) %>% 
+  rename("X1B" = "1B", "X2B" = "2B", "X3B" = "3B",
+         "key_mlbam" = "mlbamid")
+eval.df.2018 <- add_steamer_to_eval_df(eval.df.2018, steamer.2018)
 
 # 2017 projections (for evaluation)
 steamer.2017 <- read_csv("./projections/Steamer projections 2017.csv", col_types=cols()) %>% 
@@ -139,6 +163,10 @@ marcel_eval_plot(eval.df.2017, model_prefix="rf", model_desc="RF")
 marcel_eval_plot(eval.df.2017, model_prefix="knn", model_desc="kNN")
 marcel_eval_plot(eval.df.2017, model_prefix="multinom", model_desc="multinom")
 marcel_eval_plot(eval.df.2017, model_prefix="steamer", model_desc="Steamer")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.old", model_desc="RF old")
+marcel_eval_plot(eval.df.2017, model_prefix="rf.simple", model_desc="RF simple")
+
+eval.df.full <- bind_rows(eval.df.2017, eval.df.2018)
 
 # 2016 projections
 # eval.df.2016 <- get_marcel_eval_df(2016, lw_years=2015:2017, pred_df=batting.df, AB_cutoff=AB_cutoff)
@@ -165,13 +193,24 @@ summary.2017.OPS  <- create_eval_summary(eval.df.2017, stat="OPS")
 summary.2017.OBP  <- create_eval_summary(eval.df.2017, stat="OBP")
 summary.2017.SLG  <- create_eval_summary(eval.df.2017, stat="SLG")
 
+summary.2018.wOBA <- create_eval_summary(eval.df.2018)
+summary.2018.OPS  <- create_eval_summary(eval.df.2018, stat="OPS")
+summary.2018.OBP  <- create_eval_summary(eval.df.2018, stat="OBP")
+summary.2018.SLG  <- create_eval_summary(eval.df.2018, stat="SLG")
+
+summary.full.wOBA <- create_eval_summary(eval.df.full)
+summary.full.OPS  <- create_eval_summary(eval.df.full, stat="OPS")
+summary.full.OBP  <- create_eval_summary(eval.df.full, stat="OBP")
+summary.full.SLG  <- create_eval_summary(eval.df.full, stat="SLG")
+
 
 # projection system comparison --------------------------------------------
 
 # visualize correlation, MAE, and RMSE in a plot
 p <- plot_projection_summary(summary.2017.wOBA,
-                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             which=c("marcel", "steamer", "multinom", "rf"),
                              names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             # which=c("marcel", "steamer", full.prefixes),
                              # plot.title="Relative Accuracy of\nProjections",
                              # subtitle=NULL
                              ); print(p)
@@ -187,6 +226,67 @@ p <- plot_projection_summary(summary.2017.OBP,
 p <- plot_projection_summary(summary.2017.SLG,
                              which=c("marcel", "steamer", "multinom", "rf"), 
                              names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel")); print(p)
+
+# 2018
+p <- plot_projection_summary(summary.2018.wOBA,
+                             which=c("marcel", "steamer", "multinom", "rf"),
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             # which=c("marcel", "steamer", full.prefixes),
+                             # plot.title="Relative Accuracy of\nProjections",
+                             # subtitle=NULL
+                             marcel_at_zero=TRUE
+                             # ,scale=FALSE
+                             # ,metrics=c("mae", "rmse")
+                             ); print(p)
+
+p <- plot_projection_summary(summary.2018.OPS,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+                             ); print(p)
+
+p <- plot_projection_summary(summary.2018.OBP,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+                             ); print(p)
+
+p <- plot_projection_summary(summary.2018.SLG,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+                             ); print(p)
+
+# both years
+p <- plot_projection_summary(summary.full.wOBA,
+                             which=c("marcel", "steamer", "multinom", "rf"),
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             # which=c("marcel", "steamer", full.prefixes),
+                             # plot.title="Relative Accuracy of\nProjections",
+                             subtitle=("(2017-18 wOBA)"),
+                             point_size=3.5,
+                             text_size=16,
+                             title_size=20,
+                             marcel_at_zero=TRUE
+); print(p)
+
+p <- plot_projection_summary(summary.full.OPS,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+); print(p)
+
+p <- plot_projection_summary(summary.full.OBP,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+); print(p)
+
+p <- plot_projection_summary(summary.full.SLG,
+                             which=c("marcel", "steamer", "multinom", "rf"), 
+                             names=c("Marcel", "Steamer", "MLR Marcel", "RF Marcel"),
+                             marcel_at_zero=FALSE
+); print(p)
 
 library(knitr)
 kable(summary.2017.wOBA, digits=3)
