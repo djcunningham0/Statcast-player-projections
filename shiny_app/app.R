@@ -150,8 +150,16 @@ marcel_df <- dropbox_readRDS("/statcast_modeling_data/prediction_data/marcel_pro
 
 rf_probs <- dropbox_readRDS("/statcast_modeling_data/prediction_data/rf_probs.rds")
 
-lucky_df  <- dropbox_readRDS("/statcast_modeling_data/prediction_data/current_season_wOBA_preds.rds") %>% 
-  bind_rows(dropbox_readRDS("/statcast_modeling_data/prediction_data/completed_seasons_wOBA_preds.rds")) %>% 
+# The "current" year lasts until the start of the next season, so after the regular season ends that year will
+# be included in both the current and completed seasons file. Exclude it from the completed season file here
+# to prevent duplicates in the lucky batters section.
+current_preds <- dropbox_readRDS("/statcast_modeling_data/prediction_data/current_season_wOBA_preds.rds")
+current_year <- round(mean(current_preds$Season))
+completed_preds <- dropbox_readRDS("/statcast_modeling_data/prediction_data/completed_seasons_wOBA_preds.rds") %>% 
+  filter(Season != current_year)
+
+lucky_df <- current_preds %>% 
+  bind_rows(completed_preds) %>% 
   arrange(desc(Season), key_mlbam)
 
 cur_season_max_date <- as.Date(dropbox_read_file("/statcast_modeling_data/data/max_date.txt"))
