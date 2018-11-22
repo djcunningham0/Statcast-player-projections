@@ -59,9 +59,9 @@ update_data <- function(season.year=get_current_season_year(),
   }
 
   # completed season statcast:
-  #   - full rebuild once after a season ends (11/10)
+  #   - full rebuild once after a season ends (10/10)
   #   - full rebuild once just before a new season begins (3/20)
-  season.end.check <- as.Date(paste0(last.season.year,"-11-10"))
+  season.end.check <- as.Date(paste0(last.season.year,"-10-10"))
   season.start.check <- as.Date(paste0(last.season.year + 1, "-03-20"))
   if (cur.date >= season.end.check & update.hist$completed_seasons_statcast < season.end.check) {
     rebuild_completed_seasons_statcast(start_year=2015, end_year=last.season.year, path=path)
@@ -69,11 +69,6 @@ update_data <- function(season.year=get_current_season_year(),
     rebuild_completed_seasons_statcast(start_year=2015, end_year=last.season.year, path=path)
   }
   ### end less frequent runs ###
-}
-
-#' Return the number of days since a given date.
-days_since <- function(date) {
-  return(as.numeric(Sys.Date() - as.Date(date)))
 }
 
 #' don't necessarily need to save this locally since fg_guts() is easy, but this allows
@@ -173,7 +168,7 @@ update_current_season_statcast <- function(year=get_current_season_year(),
       full_rebuild <- TRUE
     } else {
       # get the last pulled date so we can build from the next day if doing partial build
-      last.date <- max(cur.batted.file$game_date)
+      last.date <- as.Date(max(cur.batted.file$game_date))
       next.date <- format(last.date+1, "%m-%d")
     }
   }
@@ -258,7 +253,7 @@ rebuild_completed_seasons_statcast <- function(start_year=2015,
 }
 
 
-#' basically a copy of baseballr::fg_bat_leaders but adds fangraphs ID only includes Spd
+#' basically a copy of baseballr::fg_bat_leaders but adds fangraphs ID
 scrape_fangraphs <- function(start_year=2018, end_year=start_year, agg=FALSE, which="full",
                              path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
   require(xml2, quietly=TRUE, warn.conflicts=FALSE)

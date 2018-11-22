@@ -21,18 +21,26 @@ get_current_season_year <- function(season_start="04-08") {
 
 #' Get the year of the last completed MLB season
 #'
-#' if 11/10 or later, assume regular season is in progress and use this year;
+#' if 10/10 or later, assume regular season is in progress and use this year;
 #' otherwise, use last year
 #' this is really conservative -- want to avoid saying a season is complete if it isn't
 #'
-#' @param season_end season end date in "mm-dd" format (default is 11/10)
-get_last_completed_season_year <- function(season_end="11-10") {
+#' @param season_end season end date in "mm-dd" format (default is 10/10)
+get_last_completed_season_year <- function(season_end="10-10") {
   cur.date  <- Sys.Date()
   cur.year  <- as.numeric(format(cur.date, "%Y"))
   
   year <- ifelse(cur.date >= as.Date(paste0(cur.year,"-",season_end)), cur.year, cur.year-1)
+  if ((year == 2017) & (cur.date >= as.Date("2018-10-01"))) {
+    year <- 2018
+  }
   
   return(year)
+}
+
+#' Return the number of days since a given date.
+days_since <- function(date) {
+  return(as.numeric(Sys.Date() - as.Date(date)))
 }
 
 #' make sure directory path ends in "/"
