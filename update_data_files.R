@@ -124,8 +124,8 @@ update_current_season_summary <- function(year=get_current_season_year(),
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
-  speed_scores <- scrape_fangraphs(start_year=year, end_year=year, agg=FALSE, which="full")
-  saveRDS(speed_scores, file=paste0(path, "current_season_summary.rds"))
+  stats <- scrape_fangraphs(start_year=year, end_year=year, agg=FALSE, which="full")
+  saveRDS(stats, file=paste0(path, "current_season_summary.rds"))
 
   # stamp today's date in the last update file
   register_updates("current_season_summary", path=path)
@@ -138,8 +138,8 @@ update_completed_seasons_summary <- function(start_year=2013, end_year=get_last_
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
-  speed_scores <- scrape_fangraphs(start_year=start_year, end_year=end_year, agg=FALSE, which="full")
-  saveRDS(speed_scores, file=paste0(path, "completed_seasons_summary.rds"))
+  stats <- scrape_fangraphs(start_year=start_year, end_year=end_year, agg=FALSE, which="full")
+  saveRDS(stats, file=paste0(path, "completed_seasons_summary.rds"))
 
   # stamp today's date in the last update file
   register_updates("completed_seasons_summary", path=path)
@@ -401,13 +401,15 @@ pull_statcast_data <- function(startYear, endYear=startYear,
     else if (year==2016) {date <- ymd("2016-04-03")}
     else if (year==2017) {date <- ymd("2017-04-02")}
     else if (year==2018) {date <- ymd("2018-03-29")}
+    else if (year==2019) {data <- ymd("2019-03-20")}
     # otherwise use a date that's definitely before the regular season starts
-    else {date <- as.Date(str_c(year,"-03-29"))}
+    else {date <- as.Date(str_c(year,"-03-20"))}
     # same idea for end date
     if (!is.na(endDate)) {end <- ymd(str_c(year, "-", endDate))}
     else if (year==2015) {end <- ymd("2015-11-02")}
     else if (year==2016) {end <- ymd("2016-11-03")}
     else if (year==2017) {end <- ymd("2017-11-02")}
+    else if (year==2018) {end <- ymd("2018-10-28")}
     else {end <- min(ymd(str_c(year,"-11-10")), Sys.Date()-1)}  # data is updated at 3am next morning, so don't try to pull today
     while (date <= end) {
       count <- count + 1
