@@ -401,7 +401,7 @@ pull_statcast_data <- function(startYear, endYear=startYear,
     else if (year==2016) {date <- ymd("2016-04-03")}
     else if (year==2017) {date <- ymd("2017-04-02")}
     else if (year==2018) {date <- ymd("2018-03-29")}
-    else if (year==2019) {data <- ymd("2019-03-20")}
+    else if (year==2019) {date <- ymd("2019-03-20")}
     # otherwise use a date that's definitely before the regular season starts
     else {date <- as.Date(str_c(year,"-03-20"))}
     # same idea for end date
