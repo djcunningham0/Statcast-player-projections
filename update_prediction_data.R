@@ -13,6 +13,7 @@ source("./data_update_utilities.R")  # this has a few useful utilities for getti
 #' wrapper function
 update_all_preds <- function(out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/") {
   # these don't take too long to run, so I'm being lazy and just letting them run daily
+  cat(paste("\nStarting prediction data update at", Sys.time()), "\n")
   update_current_season_preds()
   update_completed_season_preds()
   update_marcel_projections()
@@ -27,7 +28,7 @@ update_current_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, knn
                                         out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/") {
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating current season prediction data...")
+  cat("Updating current season prediction data...", end="")
   
   tmp <- set_linear_weights(get_current_season_year())
   lw <- tmp$lw
@@ -83,6 +84,7 @@ update_current_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, knn
   saveRDS(batting.df, file=paste0(out_path, "current_season_wOBA_preds.rds"))
   
   register_updates("current_season", out_path)
+  cat("done\n")
 }
 
 
@@ -94,7 +96,7 @@ update_completed_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, k
                                           out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/") {
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating completed seasons prediction data...")
+  cat("Updating completed seasons prediction data...", end="")
   
   year <- get_last_completed_season_year()
   tmp <- set_linear_weights((year-2):year)
@@ -151,6 +153,7 @@ update_completed_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, k
   saveRDS(batting.df, file=paste0(out_path, "completed_seasons_wOBA_preds.rds"))
   
   register_updates("completed_seasons", out_path)
+  cat("done\n")
 }
 
 
@@ -158,7 +161,7 @@ update_completed_season_preds <- function(rf_model=TRUE, multinom_model=FALSE, k
 update_marcel_projections <- function(out_path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/prediction_data/") {
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating player projection data...")
+  cat("Updating player projection data...", end="")
   
   batting.df <- readRDS("./prediction_data/completed_seasons_wOBA_preds.rds")
   
@@ -180,6 +183,7 @@ update_marcel_projections <- function(out_path="/Users/Daniel/Documents/Universi
   saveRDS(projection_df, file=paste0(out_path, "marcel_projections.rds"))
   
   register_updates("marcel_projections", out_path)
+  cat("done\n")
 }
 
 #' Add predictions from a classification model to batted ball dataframe
@@ -211,7 +215,7 @@ update_rf_prediction_grid <- function(out_path="/Users/Daniel/Documents/Universi
                                       start=NULL,
                                       step_size=50000,
                                       force_rebuild=FALSE) {
-  require(randomForest)
+  require(randomForest, quietly=TRUE, warn.conflicts=FALSE)
   out_path <- format_directory_path(out_path)
   out_file <- paste0(out_path, "rf_probs.rds")
   

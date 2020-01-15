@@ -22,6 +22,7 @@ update_data <- function(season.year=get_current_season_year(),
                         last.season.year=get_last_completed_season_year(),
                         path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
   require(readr, quietly=TRUE, warn.conflicts=FALSE)
+  cat(paste("\nStarting data file update at", Sys.time()), "\n")
 
   path <- format_directory_path(path)
   update.hist <- read_csv(paste0(path, "last_updates.csv"), col_types=cols())
@@ -76,12 +77,13 @@ update_data <- function(season.year=get_current_season_year(),
 update_linear_weights <- function(path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
   require(baseballr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating linear weights...")
+  cat("Updating linear weights...", end="")
   path <- format_directory_path(path)
   saveRDS(fg_guts(), file=paste0(path, "linear_weight_coefs.rds"))
 
   # stamp today's date in the last update file
   register_updates("linear_weights", path=path)
+  cat("done\n")
 }
 
 #' update mlb_player_id_crosswalk.rds
@@ -89,7 +91,7 @@ update_crosswalk <- function(path="/Users/Daniel/Documents/University of Chicago
   require(readr, quietly=TRUE, warn.conflicts=FALSE)
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating crosswalk...")
+  cat("Updating crosswalk...", end="")
   path <- format_directory_path(path)
 
   url <- "http://raw.githubusercontent.com/chadwickbureau/register/master/data/people.csv"
@@ -101,12 +103,13 @@ update_crosswalk <- function(path="/Users/Daniel/Documents/University of Chicago
 
   # stamp today's date in the last update file
   register_updates("crosswalk", path=path)
+  cat("done\n")
 }
 
 #' update the speed_scores.rds
 update_speed_scores <- function(start_year=2015, end_year=get_current_season_year(), agg=FALSE,
                                 path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  print("Updating speed scores...")
+  cat("Updating speed scores...", end="")
   path <- format_directory_path(path)
 
   # scrape speed scores and update the RDS file
@@ -115,12 +118,13 @@ update_speed_scores <- function(start_year=2015, end_year=get_current_season_yea
 
   # stamp today's date in the last update file
   register_updates("speed_scores", path=path)
+  cat("done\n")
 }
 
 #'
 update_current_season_summary <- function(year=get_current_season_year(),
                                           path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  print("Updating current season summary...")
+  cat("Updating current season summary...", end="")
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
@@ -129,12 +133,13 @@ update_current_season_summary <- function(year=get_current_season_year(),
 
   # stamp today's date in the last update file
   register_updates("current_season_summary", path=path)
+  cat("done\n")
 }
 
 #'
 update_completed_seasons_summary <- function(start_year=2013, end_year=get_last_completed_season_year(),
                                              path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/") {
-  print("Updating completed seasons summary...")
+  cat("Updating completed seasons summary...", end="")
   path <- format_directory_path(path)
 
   # scrape stats for all years and update the RDS file
@@ -143,6 +148,7 @@ update_completed_seasons_summary <- function(start_year=2013, end_year=get_last_
 
   # stamp today's date in the last update file
   register_updates("completed_seasons_summary", path=path)
+  cat("done\n")
 }
 
 #'
@@ -154,7 +160,7 @@ update_current_season_statcast <- function(year=get_current_season_year(),
                                            verbose=FALSE) {
   require(dplyr, quietly=TRUE, warn.conflicts=FALSE)
   
-  print("Updating current season Statcast...")
+  cat("Updating current season Statcast...\n")
   path <- format_directory_path(path)
 
   if (!file.exists(paste0(path, batted.name))) {
@@ -175,18 +181,18 @@ update_current_season_statcast <- function(year=get_current_season_year(),
 
   if (full_rebuild) {
     # build the file from scratch
-    print("Beginning full rebuild of current season Statcast files.")
+    cat("Beginning full rebuild of current season Statcast files...", end="")
     pull_statcast_data(startYear=year, endYear=year, directory=path,
                        pitches_file=all.pitches.name,
                        batted_file=batted.name,
                        verbose=verbose)
-    print("Completed full rebuild of current season Statcast files.")
 
     register_updates("current_season_statcast", path=path)
     register_updates("current_season_full_rebuild", path=path)
+    cat("done\n")
   } else {
     # partial build: add the days that haven't been pulled yet
-    print("Beginning partial build of current season Statcast files.")
+    cat("Beginning partial build of current season Statcast files...", end="")
     out <- pull_statcast_data(startYear=year, endYear=year, directory=NULL,
                               startDate=next.date, verbose=verbose)
 
@@ -208,11 +214,9 @@ update_current_season_statcast <- function(year=get_current_season_year(),
     saveRDS(all_pitches, file=paste0(path, all.pitches.name))
     saveRDS(batted, file=paste0(path, batted.name))
 
-    print("Completed partial build of current season Statcast files.")
-
     register_updates("current_season_statcast", path=path)
-    
     update_through_date()
+    cat("done\n")
   }
 }
 
@@ -240,16 +244,15 @@ rebuild_completed_seasons_statcast <- function(start_year=2015,
                                                path="/Users/Daniel/Documents/University of Chicago/thesis/Statcast linear weights/data/",
                                                all.pitches.name="completed_seasons_statcast_all_pitches.rds",
                                                batted.name="completed_seasons_statcast_batted_balls.rds") {
-  print("Updating completed seasons Statcast...")
   path <- format_directory_path(path)
 
-  print("Beginning full rebuild of completed season Statcast files.")
+  cat("Beginning full rebuild of completed season Statcast files...", end="")
   pull_statcast_data(startYear=start_year, endYear=end_year, directory=path,
                      pitches_file=all.pitches.name,
                      batted_file=batted.name)
-  print("Completed full rebuild of completed season Statcast files.")
 
   register_updates("completed_seasons_statcast", path=path)
+  cat("done\n")
 }
 
 
@@ -276,14 +279,16 @@ scrape_fangraphs <- function(start_year=2018, end_year=start_year, agg=FALSE, wh
                 "&type=", type_list, "&season=", end_year, "&month=0&season1=", start_year, "&ind=",
                 as.numeric(!agg), "&team=&rost=&age=&filter=&players=&page=1_100000")
 
-  # read the html from the url
-  out <- read_html(url) %>% html_nodes("table") %>% `[[`(12)
+  # read the html from the url and extract rgMasterTable
+  out <- xml2::read_html(url) %>% rvest::html_nodes("table")
+  ind <- which(out %>% rvest::html_attr("class") == "rgMasterTable")
+  out <- out[[ind]]
 
   # extract the hyperlinks that contain the player's fangraphs ID and position
-  links <- html_children(out)[4]
-  links <- html_nodes(links, "a")
-  links <- html_attr(links, "href")
-  links <- str_subset(links, "playerid=")
+  links <- rvest::html_children(out)[4]
+  links <- rvest::html_nodes(links, "a")
+  links <- rvest::html_attr(links, "href")
+  links <- stringr::str_subset(links, "playerid=")
 
   # links are "statss.aspx?playerid=<PLAYERID>&position=<POS>"
   player_ids <- sapply(str_split(sapply(str_split(links, "playerid="), '[', 2), "&"), '[', 1)
@@ -380,11 +385,11 @@ pull_statcast_data <- function(startYear, endYear=startYear,
 
   # print message if invalid directory was specified
   if (!is.null(directory) && (directory != "") && !file.exists(directory)) {
-    print("Specified directory does not exist.")
+    cat("Specified directory does not exist.", end="\n")
     if (str_sub(directory, 1, 2) == "./") {
       directory <- str_replace(directory, "./", paste0(getwd(),"/"))
     }
-    print(directory)
+    cat(directory, end="\n")
     return(NULL)
   }
 
@@ -420,8 +425,8 @@ pull_statcast_data <- function(startYear, endYear=startYear,
         {oneday <- suppressMessages(scrape_statcast_savant_batter_all(start_date=as.Date(date),
                                                                       end_date=as.Date(date)))
         },
-        warning=function(war) {if (verbose) {print(str_c("---- Warning: ",date," ----"))}},
-        error=function(err) {print(str_c("**** Error: ",date," ****"))}
+        warning=function(war) {if (verbose) {cat(str_c("---- Warning: ", date, " ----"), end="\n")}},
+        error=function(err) {cat(str_c("**** Error: ", date, " ****"), end="\n")}
       )
       if (!is.null(oneday)) {
         # convert all to characters for now to avoid merging errors (reformat later)
@@ -429,7 +434,7 @@ pull_statcast_data <- function(startYear, endYear=startYear,
           mutate_all(as.character)
         tmpdata <- bind_rows(tmpdata, oneday)   # merge into tmpdata
         if (verbose) {
-          print(str_c("Completed ",date))
+          cat(str_c("Completed ", date), end="\n")
         }
       }
       date <- date+1
@@ -447,11 +452,11 @@ pull_statcast_data <- function(startYear, endYear=startYear,
       mutate(game_month = month(game_date))
   }
   if (verbose) {
-    print("Done downloading data.")
+    cat("Done downloading data.", end="\n")
   }
 
   if (is.null(alldata)) {
-    print("No data for date range.")
+    cat("No data for date range.", end="\n")
     return(NULL)
   }
 
@@ -466,10 +471,10 @@ pull_statcast_data <- function(startYear, endYear=startYear,
     # add "/" to directory if it isn't there already
     directory <- format_directory_path(directory)
 
-    print("Writing all pitches file...")
+    cat("Writing all pitches file...", end="\n")
     saveRDS(alldata, file=paste0(directory, pitches_file))
 
-    print("Writing batted balls file...")
+    cat("Writing batted balls file...", end="\n")
     saveRDS(batted, file=paste0(directory, batted_file))
 
     if (showTime) { toc() }
